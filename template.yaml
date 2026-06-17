@@ -1,0 +1,272 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Chatterbox WebSocket Chat Backend - Lambda, DynamoDB, API Gateway, and IAM'
+
+Parameters:
+  LambdaCodeBucket:
+    Type: String
+    Description: 'S3 bucket containing the Lambda deployment package'
+    Default: ''
+
+  LambdaCodeKey:
+    Type: String
+    Description: 'S3 key (path) to the Lambda ZIP file'
+    Default: 'chatterbox-backend/lambda.zip'
+
+  LambdaHandler:
+    Type: String
+    Description: 'Lambda handler function'
+    Default: 'Chatterbox.Backend::Chatterbox.Backend.Functions_Handler_Generated::Handler'
+
+  StageName:
+    Type: String
+    Description: 'API Gateway stage name'
+    Default: 'prod'
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+
+  TableName:
+    Type: String
+    Description: 'DynamoDB table name for connection tracking'
+    Default: 'chatterbox-connections'
+
+Conditions:
+  UseS3Code: !Not [!Equals [!Ref LambdaCodeBucket, '']]
+
+Resources:
+  # DynamoDB Table for connection tracking
+  ConnectionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Ref TableName
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: displayName
+          AttributeType: S
+        - AttributeName: connectionId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: displayName
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: ConnectionIndex
+          KeySchema:
+            - AttributeName: connectionId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Application
+          Value: Chatterbox
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # IAM Role for Lambda execution
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: chatterbox-websocket-lambda-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Tags:
+        - Key: Application
+          Value: Chatterbox
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # IAM Policy for DynamoDB and API Gateway access
+  LambdaAccessPolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: chatterbox-lambda-access-policy
+      Roles:
+        - !Ref LambdaExecutionRole
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Action:
+              - dynamodb:DescribeTable
+              - dynamodb:GetItem
+              - dynamodb:PutItem
+              - dynamodb:UpdateItem
+              - dynamodb:DeleteItem
+              - dynamodb:Query
+              - dynamodb:Scan
+            Resource:
+              - !GetAtt ConnectionsTable.Arn
+              - !Sub '${ConnectionsTable.Arn}/index/*'
+          - Effect: Allow
+            Action:
+              - execute-api:ManageConnections
+            Resource:
+              - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/${StageName}/POST/@connections/*'
+
+  # Lambda Function
+  WebSocketHandler:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: chatterbox-websocket-handler
+      Runtime: dotnet8  # Note: .NET 10 not yet supported, use dotnet8 or custom runtime
+      Handler: !Ref LambdaHandler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code: !If
+        - UseS3Code
+        - S3Bucket: !Ref LambdaCodeBucket
+          S3Key: !Ref LambdaCodeKey
+        - ZipFile: |
+            // Placeholder - deploy with S3 code location
+            public class Handler { }
+      MemorySize: 512
+      Timeout: 30
+      Environment:
+        Variables:
+          CONNECTIONS_TABLE: !Ref ConnectionsTable
+      Tags:
+        - Key: Application
+          Value: Chatterbox
+        - Key: ManagedBy
+          Value: CloudFormation
+
+  # WebSocket API
+  WebSocketApi:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: chatterbox-websocket-api
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: $request.body.action
+      Tags:
+        Application: Chatterbox
+        ManagedBy: CloudFormation
+
+  # Lambda Integration
+  WebSocketIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref WebSocketApi
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub 'arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${WebSocketHandler.Arn}/invocations'
+      IntegrationMethod: POST
+
+  # Routes
+  ConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: $connect
+      AuthorizationType: NONE
+      Target: !Sub 'integrations/${WebSocketIntegration}'
+
+  DisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: $disconnect
+      AuthorizationType: NONE
+      Target: !Sub 'integrations/${WebSocketIntegration}'
+
+  RegisterRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: register
+      AuthorizationType: NONE
+      Target: !Sub 'integrations/${WebSocketIntegration}'
+
+  ListUsersRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: listUsers
+      AuthorizationType: NONE
+      Target: !Sub 'integrations/${WebSocketIntegration}'
+
+  MessageRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref WebSocketApi
+      RouteKey: message
+      AuthorizationType: NONE
+      Target: !Sub 'integrations/${WebSocketIntegration}'
+
+  # Deployment
+  WebSocketDeployment:
+    Type: AWS::ApiGatewayV2::Deployment
+    DependsOn:
+      - ConnectRoute
+      - DisconnectRoute
+      - RegisterRoute
+      - ListUsersRoute
+      - MessageRoute
+    Properties:
+      ApiId: !Ref WebSocketApi
+      Description: WebSocket deployment for the Chatterbox backend
+
+  # Stage
+  WebSocketStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref WebSocketApi
+      StageName: !Ref StageName
+      DeploymentId: !Ref WebSocketDeployment
+      AutoDeploy: false
+
+  # Lambda Permission for API Gateway
+  ApiInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref WebSocketHandler
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*'
+
+Outputs:
+  WebSocketApiId:
+    Description: WebSocket API ID
+    Value: !Ref WebSocketApi
+    Export:
+      Name: !Sub '${AWS::StackName}-WebSocketApiId'
+
+  WebSocketApiExecutionArn:
+    Description: WebSocket API Execution ARN
+    Value: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}'
+    Export:
+      Name: !Sub '${AWS::StackName}-WebSocketApiExecutionArn'
+
+  WebSocketEndpoint:
+    Description: WebSocket endpoint URL
+    Value: !Sub 'wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}'
+    Export:
+      Name: !Sub '${AWS::StackName}-WebSocketEndpoint'
+
+  LambdaFunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt WebSocketHandler.Arn
+    Export:
+      Name: !Sub '${AWS::StackName}-LambdaFunctionArn'
+
+  LambdaFunctionName:
+    Description: Lambda function name
+    Value: !Ref WebSocketHandler
+    Export:
+      Name: !Sub '${AWS::StackName}-LambdaFunctionName'
+
+  ConnectionsTableName:
+    Description: DynamoDB connections table name
+    Value: !Ref ConnectionsTable
+    Export:
+      Name: !Sub '${AWS::StackName}-ConnectionsTableName'
+
+  StageName:
+    Description: API Gateway stage name
+    Value: !Ref StageName
+    Export:
+      Name: !Sub '${AWS::StackName}-StageName'

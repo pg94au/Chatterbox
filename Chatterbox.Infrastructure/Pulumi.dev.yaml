@@ -1,0 +1,5 @@
+config:
+  aws:region: ap-southeast-2
+  chatterbox-infrastructure:lambdaPackagePath: ../Chatterbox.Backend/bin/Release/net10.0/publish
+  chatterbox-infrastructure:lambdaHandler: Chatterbox.Backend::Chatterbox.Backend.Function::FunctionHandler
+  chatterbox-infrastructure:stageName: prod
