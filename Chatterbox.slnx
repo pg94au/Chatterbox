@@ -1,7 +1,9 @@
 <Solution>
   <Project Path="Chatterbox.Backend/Chatterbox.Backend.csproj" />
-  <Folder Name="/CloudFormation/">
+  <Folder Name="/Deployment/">
     <File Path="CLOUDFORMATION.md" />
+    <File Path="deploy.ps1" />
+    <File Path="README-CLOUDFORMATION.md" />
     <File Path="template.yaml" />
   </Folder>
   <Project Path="Chatterbox.Backend.Tests/Chatterbox.Backend.Tests.csproj" />
