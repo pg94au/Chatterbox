@@ -6,18 +6,20 @@ param(
 	[string]$S3Bucket,
 
 	[Parameter(Mandatory=$false)]
-	[string]$StackName = "chatterbox-backend",
+	[string]$Environment = "prod",
 
 	[Parameter(Mandatory=$false)]
-	[string]$StageName = "prod",
-
-	[Parameter(Mandatory=$false)]
-	[string]$Region = "us-east-1"
+	[string]$Region = "ca-central-1"
 )
 
 $ErrorActionPreference = "Stop"
 
+# Derive stack and resource names from environment
+$StackName = "chatterbox-$Environment"
+$StageName = $Environment
+
 Write-Host "=== Chatterbox Deployment ===" -ForegroundColor Cyan
+Write-Host "Environment: $Environment" -ForegroundColor Yellow
 Write-Host "Stack: $StackName" -ForegroundColor Yellow
 Write-Host "S3 Bucket: $S3Bucket" -ForegroundColor Yellow
 Write-Host "Stage: $StageName" -ForegroundColor Yellow
@@ -49,7 +51,7 @@ Write-Host "  ✓ Package created: $zipPath" -ForegroundColor Gray
 
 # Step 3: Upload to S3
 Write-Host "[3/4] Uploading to S3..." -ForegroundColor Green
-$s3Key = "chatterbox-backend/lambda.zip"
+$s3Key = "chatterbox-$Environment/lambda.zip"
 aws s3 cp $zipPath "s3://$S3Bucket/$s3Key" --region $Region
 if ($LASTEXITCODE -ne 0) {
 	throw "S3 upload failed"
@@ -62,6 +64,7 @@ aws cloudformation deploy `
 	--template-file template.yaml `
 	--stack-name $StackName `
 	--parameter-overrides `
+		Environment=$Environment `
 		LambdaCodeBucket=$S3Bucket `
 		LambdaCodeKey=$s3Key `
 		StageName=$StageName `

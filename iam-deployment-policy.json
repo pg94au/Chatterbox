@@ -1,0 +1,144 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ManageIAMRolesAndPolicies",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:GetRole",
+        "iam:UpdateRole",
+        "iam:DeleteRole",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:CreatePolicy",
+        "iam:GetPolicy",
+        "iam:DeletePolicy",
+        "iam:GetPolicyVersion",
+        "iam:CreatePolicyVersion",
+        "iam:DeletePolicyVersion",
+        "iam:ListPolicyVersions",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:ListAttachedRolePolicies",
+        "iam:ListRolePolicies",
+        "iam:PassRole"
+      ],
+      "Resource": [
+        "arn:aws:iam::*:role/chatterbox-*",
+        "arn:aws:iam::*:policy/chatterbox-*"
+      ]
+    },
+    {
+      "Sid": "ManageLambdaFunctions",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:CreateFunction",
+        "lambda:GetFunction",
+        "lambda:UpdateFunctionCode",
+        "lambda:UpdateFunctionConfiguration",
+        "lambda:DeleteFunction",
+        "lambda:TagResource",
+        "lambda:UntagResource",
+        "lambda:ListTags",
+        "lambda:AddPermission",
+        "lambda:RemovePermission",
+        "lambda:GetPolicy",
+        "lambda:PublishVersion",
+        "lambda:GetFunctionConfiguration"
+      ],
+      "Resource": [
+        "arn:aws:lambda:*:*:function:chatterbox-*"
+      ]
+    },
+    {
+      "Sid": "ManageAPIGateway",
+      "Effect": "Allow",
+      "Action": [
+        "apigateway:POST",
+        "apigateway:GET",
+        "apigateway:PUT",
+        "apigateway:PATCH",
+        "apigateway:DELETE"
+      ],
+      "Resource": [
+        "arn:aws:apigateway:*::/apis",
+        "arn:aws:apigateway:*::/apis/*"
+      ]
+    },
+    {
+      "Sid": "ManageDynamoDB",
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:CreateTable",
+        "dynamodb:DescribeTable",
+        "dynamodb:UpdateTable",
+        "dynamodb:DeleteTable",
+        "dynamodb:TagResource",
+        "dynamodb:UntagResource",
+        "dynamodb:ListTagsOfResource",
+        "dynamodb:DescribeContinuousBackups",
+        "dynamodb:DescribeTimeToLive",
+        "dynamodb:UpdateTimeToLive"
+      ],
+      "Resource": [
+        "arn:aws:dynamodb:*:*:table/chatterbox-*"
+      ]
+    },
+    {
+      "Sid": "ManageCloudWatchLogs",
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:DescribeLogGroups",
+        "logs:DeleteLogGroup",
+        "logs:PutRetentionPolicy",
+        "logs:TagLogGroup",
+        "logs:UntagLogGroup"
+      ],
+      "Resource": [
+        "arn:aws:logs:*:*:log-group:/aws/lambda/chatterbox-*"
+      ]
+    },
+    {
+      "Sid": "ManageCloudFormation",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:CreateStack",
+        "cloudformation:UpdateStack",
+        "cloudformation:DeleteStack",
+        "cloudformation:DescribeStacks",
+        "cloudformation:DescribeStackEvents",
+        "cloudformation:DescribeStackResources",
+        "cloudformation:GetTemplate",
+        "cloudformation:ValidateTemplate",
+        "cloudformation:CreateChangeSet",
+        "cloudformation:DescribeChangeSet",
+        "cloudformation:ExecuteChangeSet",
+        "cloudformation:DeleteChangeSet",
+        "cloudformation:ListStacks"
+      ],
+      "Resource": [
+        "arn:aws:cloudformation:*:*:stack/chatterbox-*",
+        "arn:aws:cloudformation:*:*:stack/chatterbox-*/*"
+      ]
+    },
+    {
+      "Sid": "S3LambdaCodeAccess",
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject",
+        "s3:DeleteObject",
+        "s3:ListBucket"
+      ],
+      "Resource": [
+        "arn:aws:s3:::*",
+        "arn:aws:s3:::*/chatterbox-backend/*"
+      ]
+    }
+  ]
+}
