@@ -39,7 +39,7 @@ Resources:
   ConnectionsTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: !Ref TableName
+      TableName: !Sub '${TableName}-${StageName}'
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
         - AttributeName: displayName
@@ -66,7 +66,7 @@ Resources:
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: chatterbox-websocket-lambda-role
+      RoleName: !Sub 'chatterbox-websocket-lambda-role-${StageName}'
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -86,7 +86,7 @@ Resources:
   LambdaAccessPolicy:
     Type: AWS::IAM::Policy
     Properties:
-      PolicyName: chatterbox-lambda-access-policy
+      PolicyName: !Sub 'chatterbox-lambda-access-policy-${StageName}'
       Roles:
         - !Ref LambdaExecutionRole
       PolicyDocument:
@@ -114,7 +114,7 @@ Resources:
   WebSocketHandler:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: chatterbox-websocket-handler
+      FunctionName: !Sub 'chatterbox-websocket-handler-${StageName}'
       Runtime: dotnet10
       Handler: !Ref LambdaHandler
       Role: !GetAtt LambdaExecutionRole.Arn
@@ -140,7 +140,7 @@ Resources:
   WebSocketApi:
     Type: AWS::ApiGatewayV2::Api
     Properties:
-      Name: chatterbox-websocket-api
+      Name: !Sub 'chatterbox-websocket-api-${StageName}'
       ProtocolType: WEBSOCKET
       RouteSelectionExpression: $request.body.action
       Tags:
