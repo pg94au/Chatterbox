@@ -147,6 +147,13 @@ Resources:
         Application: Chatterbox
         Environment: !Ref StageName
 
+  # CloudWatch Logs for API Gateway access logging
+  WebSocketAccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/apigateway/chatterbox-websocket-api-${StageName}'
+      RetentionInDays: 14
+
   # Lambda Integration
   WebSocketIntegration:
     Type: AWS::ApiGatewayV2::Integration
@@ -218,6 +225,12 @@ Resources:
       StageName: !Ref StageName
       DeploymentId: !Ref WebSocketDeployment
       AutoDeploy: false
+      AccessLogSettings:
+        DestinationArn: !GetAtt WebSocketAccessLogGroup.Arn
+        Format: '{"requestId":"$context.requestId","eventType":"$context.eventType","routeKey":"$context.routeKey","connectionId":"$context.connectionId","status":"$context.status","ip":"$context.identity.sourceIp","userAgent":"$context.identity.userAgent","requestTime":"$context.requestTime"}'
+      DefaultRouteSettings:
+        DetailedMetricsEnabled: true
+        LoggingLevel: INFO
       Tags:
         Application: Chatterbox
         Environment: !Ref StageName

@@ -171,6 +171,9 @@ aws lambda update-function-code `
 ```powershell
 # View Lambda logs
 aws logs tail /aws/lambda/chatterbox-websocket-handler --follow
+
+# View API Gateway access logs
+aws logs tail /aws/apigateway/chatterbox-websocket-api-prod --follow
 ```
 
 ### API Gateway Metrics
