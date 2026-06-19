@@ -7,5 +7,4 @@
     <File Path="template.yaml" />
   </Folder>
   <Project Path="Chatterbox.Backend.Tests/Chatterbox.Backend.Tests.csproj" />
-  <Project Path="Chatterbox.Infrastructure/Chatterbox.Infrastructure.csproj" />
 </Solution>
