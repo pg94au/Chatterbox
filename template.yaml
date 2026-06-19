@@ -115,7 +115,7 @@ Resources:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: chatterbox-websocket-handler
-      Runtime: provided.al2023  # Custom runtime for .NET 10 (not yet natively supported)
+      Runtime: dotnet10
       Handler: !Ref LambdaHandler
       Role: !GetAtt LambdaExecutionRole.Arn
       Code: !If
