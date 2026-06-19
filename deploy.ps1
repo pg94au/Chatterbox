@@ -17,12 +17,14 @@ $ErrorActionPreference = "Stop"
 # Derive stack and resource names from environment
 $StackName = "chatterbox-$Environment"
 $StageName = $Environment
+$TableName = "chatterbox-connections-$Environment"
 
 Write-Host "=== Chatterbox Deployment ===" -ForegroundColor Cyan
 Write-Host "Environment: $Environment" -ForegroundColor Yellow
 Write-Host "Stack: $StackName" -ForegroundColor Yellow
 Write-Host "S3 Bucket: $S3Bucket" -ForegroundColor Yellow
 Write-Host "Stage: $StageName" -ForegroundColor Yellow
+Write-Host "Table: $TableName" -ForegroundColor Yellow
 Write-Host "Region: $Region" -ForegroundColor Yellow
 Write-Host ""
 
@@ -65,6 +67,7 @@ aws cloudformation deploy `
 	--stack-name $StackName `
 	--parameter-overrides `
 		Environment=$Environment `
+		TableName=$TableName `
 		LambdaCodeBucket=$S3Bucket `
 		LambdaCodeKey=$s3Key `
 		StageName=$StageName `
