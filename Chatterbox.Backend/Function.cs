@@ -4,6 +4,7 @@ using Amazon.DynamoDBv2.DataModel;
 using Amazon.Lambda.Annotations;
 using Amazon.Lambda.APIGatewayEvents;
 using Amazon.Lambda.Core;
+using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
@@ -13,19 +14,23 @@ namespace Chatterbox.Backend;
 public class Functions
 {
     private readonly DynamoDBContext _context;
+    private readonly ILogger<Functions> _logger;
 
     private readonly string _tableName =
         Environment.GetEnvironmentVariable("CONNECTIONS_TABLE")
         ?? throw new InvalidOperationException("CONNECTIONS_TABLE not configured");
 
-    public Functions(DynamoDBContext context)
+    public Functions(DynamoDBContext context, ILogger<Functions> logger)
     {
         _context = context;
+        _logger = logger;
     }
 
     [LambdaFunction]
     public async Task Handler(APIGatewayProxyRequest request)
     {
+        _logger.LogInformation("Lambda handler invoked for route {RouteKey} and needs to process the request.", request.RequestContext.RouteKey);
+
         var routeKey = request.RequestContext.RouteKey;
 
         switch (routeKey)
