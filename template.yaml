@@ -59,8 +59,8 @@ Resources:
       Tags:
         - Key: Application
           Value: Chatterbox
-        - Key: ManagedBy
-          Value: CloudFormation
+        - Key: Environment
+          Value: !Ref StageName
 
   # IAM Role for Lambda execution
   LambdaExecutionRole:
@@ -79,8 +79,8 @@ Resources:
       Tags:
         - Key: Application
           Value: Chatterbox
-        - Key: ManagedBy
-          Value: CloudFormation
+        - Key: Environment
+          Value: !Ref StageName
 
   # IAM Policy for DynamoDB and API Gateway access
   LambdaAccessPolicy:
@@ -133,8 +133,8 @@ Resources:
       Tags:
         - Key: Application
           Value: Chatterbox
-        - Key: ManagedBy
-          Value: CloudFormation
+        - Key: Environment
+          Value: !Ref StageName
 
   # WebSocket API
   WebSocketApi:
@@ -145,7 +145,7 @@ Resources:
       RouteSelectionExpression: $request.body.action
       Tags:
         Application: Chatterbox
-        ManagedBy: CloudFormation
+        Environment: !Ref StageName
 
   # Lambda Integration
   WebSocketIntegration:
@@ -218,6 +218,9 @@ Resources:
       StageName: !Ref StageName
       DeploymentId: !Ref WebSocketDeployment
       AutoDeploy: false
+      Tags:
+        Application: Chatterbox
+        Environment: !Ref StageName
 
   # Lambda Permission for API Gateway
   ApiInvokePermission:
