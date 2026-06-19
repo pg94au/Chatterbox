@@ -24,6 +24,8 @@ public class Functions
     {
         _context = context;
         _logger = logger;
+
+        _logger.LogInformation("Functions class initialized.");
     }
 
     [LambdaFunction]
