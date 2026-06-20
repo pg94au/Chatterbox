@@ -14,6 +14,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+$RepoRoot = $PSScriptRoot
+$BackendRoot = Join-Path $RepoRoot "Chatterbox.Backend"
+
 # Derive stack and resource names from environment
 $StackName = "chatterbox-$Environment"
 $StageName = $Environment
@@ -29,8 +32,8 @@ Write-Host "Region: $Region" -ForegroundColor Yellow
 Write-Host ""
 
 # Step 1: Build Lambda
-Write-Host "[1/4] Building Lambda function..." -ForegroundColor Green
-Push-Location Chatterbox.Backend
+Write-Host "[1/5] Building Lambda function..." -ForegroundColor Green
+Push-Location $BackendRoot
 try {
 	dotnet publish -c Release -o publish
 	if ($LASTEXITCODE -ne 0) {
@@ -43,25 +46,83 @@ finally {
 }
 
 # Step 2: Package Lambda
-Write-Host "[2/4] Packaging Lambda ZIP..." -ForegroundColor Green
-$zipPath = "Chatterbox.Backend\publish\lambda.zip"
+Write-Host "[2/5] Packaging Lambda ZIP..." -ForegroundColor Green
+$zipPath = Join-Path $BackendRoot "publish\lambda.zip"
 if (Test-Path $zipPath) {
 	Remove-Item $zipPath -Force
 }
-Compress-Archive -Path "Chatterbox.Backend\publish\*" -DestinationPath $zipPath -Force
+Compress-Archive -Path (Join-Path $BackendRoot "publish\*") -DestinationPath $zipPath -Force
 Write-Host "  ✓ Package created: $zipPath" -ForegroundColor Gray
 
-# Step 3: Upload to S3
-Write-Host "[3/4] Uploading to S3..." -ForegroundColor Green
-$s3Key = "chatterbox-$Environment/lambda.zip"
+# Step 3: Apply S3 lifecycle policy
+Write-Host "[3/5] Applying S3 lifecycle policy..." -ForegroundColor Green
+$artifactPrefix = "chatterbox-"
+$lifecycleConfiguration = @{
+	Rules = @(
+		@{
+			ID = "ExpireDeploymentArtifacts"
+			Status = "Enabled"
+			Filter = @{
+				Prefix = $artifactPrefix
+			}
+			Expiration = @{
+				Days = 30
+			}
+			AbortIncompleteMultipartUpload = @{
+				DaysAfterInitiation = 7
+			}
+		}
+	)
+} | ConvertTo-Json -Depth 10
+
+$tempLifecyclePath = Join-Path $env:TEMP "chatterbox-lifecycle-$Environment.json"
+Set-Content -Path $tempLifecyclePath -Value $lifecycleConfiguration -Encoding utf8
+$tempLifecycleUri = "file://" + ($tempLifecyclePath -replace '\\', '/')
+try {
+	aws s3api put-bucket-lifecycle-configuration `
+		--bucket $S3Bucket `
+		--lifecycle-configuration $tempLifecycleUri `
+		--region $Region
+	if ($LASTEXITCODE -ne 0) {
+		throw "S3 lifecycle configuration failed"
+	}
+	Write-Host "  ✓ Lifecycle policy applied" -ForegroundColor Gray
+}
+finally {
+	if (Test-Path $tempLifecyclePath) {
+		Remove-Item $tempLifecyclePath -Force
+	}
+}
+
+# Step 4: Upload to S3
+Write-Host "[4/5] Uploading to S3..." -ForegroundColor Green
+$artifactInputs = Get-ChildItem -Path $BackendRoot -Recurse -File |
+	Where-Object {
+		$_.FullName -notmatch '\\(bin|obj|publish)\\' -and
+		$_.Extension -in @('.cs', '.csproj', '.json', '.props', '.targets', '.config', '.resx')
+	} |
+	Sort-Object FullName
+
+$hashBuilder = [System.Text.StringBuilder]::new()
+foreach ($file in $artifactInputs) {
+	[void]$hashBuilder.AppendLine($file.FullName.Substring($BackendRoot.Length + 1))
+	[void]$hashBuilder.AppendLine([System.IO.File]::ReadAllText($file.FullName))
+}
+
+$artifactHash = [System.BitConverter]::ToString(
+	[System.Security.Cryptography.SHA256]::Create().ComputeHash([System.Text.Encoding]::UTF8.GetBytes($hashBuilder.ToString()))
+) -replace '-', ''
+$artifactHash = $artifactHash.Substring(0, 12).ToLowerInvariant()
+
+$s3Key = "$artifactPrefix$Environment/$artifactHash/lambda.zip"
 aws s3 cp $zipPath "s3://$S3Bucket/$s3Key" --region $Region
 if ($LASTEXITCODE -ne 0) {
 	throw "S3 upload failed"
 }
 Write-Host "  ✓ Uploaded to s3://$S3Bucket/$s3Key" -ForegroundColor Gray
 
-# Step 4: Deploy CloudFormation
-Write-Host "[4/4] Deploying CloudFormation stack..." -ForegroundColor Green
+# Step 5: Deploy CloudFormation
+Write-Host "[5/5] Deploying CloudFormation stack..." -ForegroundColor Green
 aws cloudformation deploy `
 	--template-file template.yaml `
 	--stack-name $StackName `
