@@ -1,14 +1,18 @@
+using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DataModel;
+using Amazon.DynamoDBv2.Model;
 
 namespace Chatterbox.Backend;
 
 public sealed class ConnectionsStore
 {
+    private readonly IAmazonDynamoDB _client;
     private readonly DynamoDBContext _context;
     private readonly string _tableName;
 
-    internal ConnectionsStore(DynamoDBContext context, string tableName)
+    internal ConnectionsStore(IAmazonDynamoDB client, DynamoDBContext context, string tableName)
     {
+        _client = client;
         _context = context;
         _tableName = tableName;
     }
@@ -24,12 +28,24 @@ public sealed class ConnectionsStore
 
     internal async Task<PresenceRecord?> FindByConnectionIdAsync(string connectionId)
     {
-        var search = _context.QueryAsync<PresenceRecord>(
-            connectionId,
-            CreateIndexTableConfig("ConnectionIndex")
+        var response = await _client.QueryAsync(new QueryRequest
+        {
+            TableName = _tableName,
+            IndexName = "ConnectionIndex",
+            KeyConditionExpression = "#connectionId = :connectionId",
+            ExpressionAttributeNames = new Dictionary<string, string>
+            {
+                ["#connectionId"] = "connectionId"
+            },
+            ExpressionAttributeValues = new Dictionary<string, AttributeValue>
+            {
+                [":connectionId"] = new AttributeValue { S = connectionId }
+            },
+            Limit = 1
+        }
         );
 
-        return (await search.GetRemainingAsync()).SingleOrDefault();
+        return response.Items.Count == 0 ? null : ToPresenceRecord(response.Items[0]);
     }
 
     internal async Task<List<PresenceRecord>> GetAllAsync()
@@ -48,10 +64,13 @@ public sealed class ConnectionsStore
             OverrideTableName = _tableName
         };
 
-    private DynamoDBOperationConfig CreateIndexTableConfig(string indexName) =>
+    private static PresenceRecord ToPresenceRecord(Dictionary<string, AttributeValue> item) =>
         new()
         {
-            OverrideTableName = _tableName,
-            IndexName = indexName
+            DisplayName = item.TryGetValue("displayName", out var displayName) ? displayName.S : "",
+            ConnectionId = item.TryGetValue("connectionId", out var connectionId) ? connectionId.S : "",
+            ConnectedAt = item.TryGetValue("connectedAt", out var connectedAt) && long.TryParse(connectedAt.N, out var value)
+                ? value
+                : 0
         };
 }
