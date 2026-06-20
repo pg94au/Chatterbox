@@ -29,7 +29,7 @@ public class Functions
     }
 
     [LambdaFunction]
-    public async Task Handler(APIGatewayProxyRequest request)
+    public async Task<WebSocketLambdaResponse> Handler(APIGatewayProxyRequest request)
     {
         _logger.LogInformation("Lambda handler invoked for route {RouteKey} and needs to process the request.", request.RequestContext.RouteKey);
 
@@ -60,6 +60,8 @@ public class Functions
             default:
                 break;
         }
+
+        return new WebSocketLambdaResponse { StatusCode = 200 };
     }
 
     private async Task HandleConnect(APIGatewayProxyRequest request)
