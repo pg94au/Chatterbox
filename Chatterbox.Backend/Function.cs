@@ -111,7 +111,7 @@ public class Functions
         //
         // Does this display name already exist?
         //
-        var existingName = await _context.LoadAsync<PresenceRecord>(body.DisplayName);
+        var existingName = await _context.LoadAsync<PresenceRecord>(body.DisplayName, GetTableConfig());
 
         if (existingName is not null)
         {
@@ -144,7 +144,8 @@ public class Functions
                 DisplayName = body.DisplayName,
                 ConnectionId = connectionId,
                 ConnectedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-            });
+            },
+            GetTableConfig());
 
         if (isNewUser)
         {
@@ -165,7 +166,7 @@ public class Functions
             return;
         }
 
-        await _context.DeleteAsync<PresenceRecord>(record.DisplayName);
+        await _context.DeleteAsync<PresenceRecord>(record.DisplayName, GetTableConfig());
 
         await Broadcast(CreateManagementClient(request), new UserLeftEvent(record.DisplayName));
     }
@@ -210,7 +211,7 @@ public class Functions
             return;
         }
 
-        var recipient = await _context.LoadAsync<PresenceRecord>(body.To);
+        var recipient = await _context.LoadAsync<PresenceRecord>(body.To, GetTableConfig());
 
         if (recipient is null)
         {
@@ -235,10 +236,7 @@ public class Functions
         var search =
             _context.QueryAsync<PresenceRecord>(
                 connectionId,
-                new DynamoDBOperationConfig
-                {
-                    IndexName = "ConnectionIndex"
-                }
+                GetIndexTableConfig("ConnectionIndex")
             );
 
         return (await search.GetRemainingAsync()).SingleOrDefault();
@@ -248,10 +246,7 @@ public class Functions
     {
         var search = _context.ScanAsync<PresenceRecord>(
             new List<ScanCondition>(),
-            new DynamoDBOperationConfig
-            {
-                OverrideTableName = _tableName
-            }
+            GetTableConfig()
         );
 
         return await search.GetRemainingAsync();
@@ -268,6 +263,19 @@ public class Functions
             }
         );
     }
+
+    private DynamoDBOperationConfig GetTableConfig() =>
+        new()
+        {
+            OverrideTableName = _tableName
+        };
+
+    private DynamoDBOperationConfig GetIndexTableConfig(string indexName) =>
+        new()
+        {
+            OverrideTableName = _tableName,
+            IndexName = indexName
+        };
 
     private async Task Broadcast(IAmazonApiGatewayManagementApi apiClient, object payload)
     {
