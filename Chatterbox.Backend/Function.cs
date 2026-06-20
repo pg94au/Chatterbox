@@ -1,6 +1,5 @@
 using Amazon.ApiGatewayManagementApi;
 using Amazon.ApiGatewayManagementApi.Model;
-using Amazon.DynamoDBv2.DataModel;
 using Amazon.Lambda.Annotations;
 using Amazon.Lambda.APIGatewayEvents;
 using Amazon.Lambda.Core;
@@ -13,16 +12,12 @@ namespace Chatterbox.Backend;
 
 public class Functions
 {
-    private readonly DynamoDBContext _context;
+    private readonly ConnectionsStore _connectionsStore;
     private readonly ILogger<Functions> _logger;
 
-    private readonly string _tableName =
-        Environment.GetEnvironmentVariable("CONNECTIONS_TABLE")
-        ?? throw new InvalidOperationException("CONNECTIONS_TABLE not configured");
-
-    public Functions(DynamoDBContext context, ILogger<Functions> logger)
+    public Functions(ConnectionsStore connectionsStore, ILogger<Functions> logger)
     {
-        _context = context;
+        _connectionsStore = connectionsStore;
         _logger = logger;
 
         _logger.LogInformation("Functions class initialized.");
@@ -96,7 +91,7 @@ public class Functions
         //
         // Is this connection already registered?
         //
-        var existingConnection = await FindByConnectionId(connectionId);
+        var existingConnection = await _connectionsStore.FindByConnectionIdAsync(connectionId);
 
         if (existingConnection is not null)
         {
@@ -111,7 +106,7 @@ public class Functions
         //
         // Does this display name already exist?
         //
-        var existingName = await _context.LoadAsync<PresenceRecord>(body.DisplayName, GetTableConfig());
+        var existingName = await _connectionsStore.LoadByDisplayNameAsync(body.DisplayName);
 
         if (existingName is not null)
         {
@@ -138,14 +133,13 @@ public class Functions
 
         var isNewUser = existingName is null;
 
-        await _context.SaveAsync(
+        await _connectionsStore.SaveAsync(
             new PresenceRecord
             {
                 DisplayName = body.DisplayName,
                 ConnectionId = connectionId,
                 ConnectedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
-            },
-            GetTableConfig());
+            });
 
         if (isNewUser)
         {
@@ -159,14 +153,14 @@ public class Functions
     {
         var connectionId = request.RequestContext.ConnectionId;
 
-        var record = await FindByConnectionId(connectionId);
+        var record = await _connectionsStore.FindByConnectionIdAsync(connectionId);
 
         if (record is null)
         {
             return;
         }
 
-        await _context.DeleteAsync<PresenceRecord>(record.DisplayName, GetTableConfig());
+        await _connectionsStore.DeleteByDisplayNameAsync(record.DisplayName);
 
         await Broadcast(CreateManagementClient(request), new UserLeftEvent(record.DisplayName));
     }
@@ -175,7 +169,7 @@ public class Functions
     {
         var apiClient = CreateManagementClient(request);
 
-        var users = await GetAllConnections();
+        var users = await _connectionsStore.GetAllAsync();
 
         await SendToConnection(
             apiClient,
@@ -199,7 +193,7 @@ public class Functions
         var apiClient = CreateManagementClient(request);
 
         var sender =
-            await FindByConnectionId(senderConnectionId);
+            await _connectionsStore.FindByConnectionIdAsync(senderConnectionId);
 
         if (sender is null)
         {
@@ -211,7 +205,7 @@ public class Functions
             return;
         }
 
-        var recipient = await _context.LoadAsync<PresenceRecord>(body.To, GetTableConfig());
+        var recipient = await _connectionsStore.LoadByDisplayNameAsync(body.To);
 
         if (recipient is null)
         {
@@ -230,28 +224,6 @@ public class Functions
         );
     }
 
-    private async Task<PresenceRecord?> FindByConnectionId(
-        string connectionId)
-    {
-        var search =
-            _context.QueryAsync<PresenceRecord>(
-                connectionId,
-                GetIndexTableConfig("ConnectionIndex")
-            );
-
-        return (await search.GetRemainingAsync()).SingleOrDefault();
-    }
-
-    private async Task<List<PresenceRecord>> GetAllConnections()
-    {
-        var search = _context.ScanAsync<PresenceRecord>(
-            new List<ScanCondition>(),
-            GetTableConfig()
-        );
-
-        return await search.GetRemainingAsync();
-    }
-
     private IAmazonApiGatewayManagementApi CreateManagementClient(APIGatewayProxyRequest request)
     {
         var endpoint = $"https://{request.RequestContext.DomainName}/{request.RequestContext.Stage}";
@@ -264,22 +236,9 @@ public class Functions
         );
     }
 
-    private DynamoDBOperationConfig GetTableConfig() =>
-        new()
-        {
-            OverrideTableName = _tableName
-        };
-
-    private DynamoDBOperationConfig GetIndexTableConfig(string indexName) =>
-        new()
-        {
-            OverrideTableName = _tableName,
-            IndexName = indexName
-        };
-
     private async Task Broadcast(IAmazonApiGatewayManagementApi apiClient, object payload)
     {
-        var connections = await GetAllConnections();
+        var connections = await _connectionsStore.GetAllAsync();
 
         foreach (var item in connections)
         {
