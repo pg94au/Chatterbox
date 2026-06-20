@@ -154,4 +154,4 @@ $endpoint = aws cloudformation describe-stacks `
 Write-Host "WebSocket Endpoint: $endpoint" -ForegroundColor Green
 Write-Host ""
 Write-Host "Connect to your WebSocket:" -ForegroundColor Cyan
-Write-Host "  wss://$endpoint" -ForegroundColor White
+Write-Host "  $endpoint" -ForegroundColor White
