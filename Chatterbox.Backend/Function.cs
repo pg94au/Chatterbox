@@ -72,7 +72,10 @@ public class Functions
     private async Task HandleRegister(APIGatewayProxyRequest request)
     {
         var body =
-            JsonSerializer.Deserialize<RegisterRequest>(request.Body)
+            JsonSerializer.Deserialize<RegisterRequest>(
+                request.Body,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true }
+            )
             ?? throw new InvalidOperationException();
 
         var connectionId = request.RequestContext.ConnectionId;
