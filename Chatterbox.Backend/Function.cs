@@ -187,13 +187,11 @@ public class Functions
             JsonSerializer.Deserialize<MessageRequest>(request.Body)
             ?? throw new InvalidOperationException();
 
-        var senderConnectionId =
-            request.RequestContext.ConnectionId;
+        var senderConnectionId = request.RequestContext.ConnectionId;
 
         var apiClient = CreateManagementClient(request);
 
-        var sender =
-            await _connectionsStore.FindByConnectionIdAsync(senderConnectionId);
+        var sender = await _connectionsStore.FindByConnectionIdAsync(senderConnectionId);
 
         if (sender is null)
         {

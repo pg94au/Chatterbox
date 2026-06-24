@@ -18,7 +18,7 @@ public sealed class ConnectionsStore
     }
 
     internal Task<PresenceRecord?> LoadByDisplayNameAsync(string displayName) =>
-        _context.LoadAsync<PresenceRecord>(displayName, CreateTableConfig());
+        _context.LoadAsync<PresenceRecord?>(displayName, CreateTableConfig());
 
     internal Task SaveAsync(PresenceRecord record) =>
         _context.SaveAsync(record, CreateTableConfig());

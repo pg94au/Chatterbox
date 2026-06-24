@@ -8,6 +8,7 @@ public class PresenceRecord
     [DynamoDBHashKey("displayName")]
     public string DisplayName { get; set; } = "";
 
+    [DynamoDBProperty("connectionId")]
     [DynamoDBGlobalSecondaryIndexHashKey("ConnectionIndex")]
     public string ConnectionId { get; set; } = "";
 
