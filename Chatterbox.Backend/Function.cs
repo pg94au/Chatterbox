@@ -88,26 +88,21 @@ public class Functions
             return;
         }
 
-        //
         // Is this connection already registered?
-        //
         var existingConnection = await _connectionsStore.FindByConnectionIdAsync(connectionId);
-
         if (existingConnection is not null)
         {
             await SendToConnection(
                 apiClient,
                 connectionId,
-                new ErrorEvent("already_registered"));
+                new ErrorEvent("already_registered")
+            );
 
             return;
         }
 
-        //
         // Does this display name already exist?
-        //
         var existingName = await _connectionsStore.LoadByDisplayNameAsync(body.DisplayName);
-
         if (existingName is not null)
         {
             try
@@ -131,8 +126,6 @@ public class Functions
             }
         }
 
-        var isNewUser = existingName is null;
-
         await _connectionsStore.SaveAsync(
             new PresenceRecord
             {
@@ -141,6 +134,7 @@ public class Functions
                 ConnectedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
             });
 
+        var isNewUser = existingName is null;
         if (isNewUser)
         {
             await Broadcast(apiClient, new UserJoinedEvent(body.DisplayName));
@@ -154,7 +148,6 @@ public class Functions
         var connectionId = request.RequestContext.ConnectionId;
 
         var record = await _connectionsStore.FindByConnectionIdAsync(connectionId);
-
         if (record is null)
         {
             return;
@@ -178,7 +171,8 @@ public class Functions
             {
                 DisplayName = item.DisplayName,
                 ConnectedAt = item.ConnectedAt
-            })));
+            }))
+        );
     }
 
     private async Task HandleMessage(APIGatewayProxyRequest request)
@@ -192,13 +186,13 @@ public class Functions
         var apiClient = CreateManagementClient(request);
 
         var sender = await _connectionsStore.FindByConnectionIdAsync(senderConnectionId);
-
         if (sender is null)
         {
             await SendToConnection(
                 apiClient,
                 senderConnectionId,
-                new ErrorEvent("sender_not_registered"));
+                new ErrorEvent("sender_not_registered")
+            );
 
             return;
         }
