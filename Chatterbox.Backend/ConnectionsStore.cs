@@ -7,10 +7,10 @@ namespace Chatterbox.Backend;
 public sealed class ConnectionsStore
 {
     private readonly IAmazonDynamoDB _client;
-    private readonly DynamoDBContext _context;
+    private readonly IDynamoDBContext _context;
     private readonly string _tableName;
 
-    internal ConnectionsStore(IAmazonDynamoDB client, DynamoDBContext context, string tableName)
+    internal ConnectionsStore(IAmazonDynamoDB client, IDynamoDBContext context, string tableName)
     {
         _client = client;
         _context = context;

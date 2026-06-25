@@ -25,15 +25,18 @@ public class Startup
         hostBuilder.Logging.AddSerilog(Log.Logger, dispose: true);
 
         hostBuilder.Services.AddSingleton<IAmazonDynamoDB>(_ => new AmazonDynamoDBClient());
-        hostBuilder.Services.AddSingleton(sp => new DynamoDBContext(
-            sp.GetRequiredService<IAmazonDynamoDB>(),
-            new DynamoDBContextConfig())
+        hostBuilder.Services.AddSingleton<IDynamoDBContext>(sp =>
+            new DynamoDBContextBuilder()
+                .WithDynamoDBClient(sp.GetRequiredService<IAmazonDynamoDB>)
+                .Build()
         );
-        hostBuilder.Services.AddSingleton(sp => new ConnectionsStore(
-            sp.GetRequiredService<IAmazonDynamoDB>(),
-            sp.GetRequiredService<DynamoDBContext>(),
-            Environment.GetEnvironmentVariable("CONNECTIONS_TABLE")
-            ?? throw new InvalidOperationException("CONNECTIONS_TABLE not configured"))
+        hostBuilder.Services.AddSingleton(sp =>
+            new ConnectionsStore(
+                sp.GetRequiredService<IAmazonDynamoDB>(),
+                sp.GetRequiredService<IDynamoDBContext>(),
+                Environment.GetEnvironmentVariable("CONNECTIONS_TABLE")
+                ?? throw new InvalidOperationException("CONNECTIONS_TABLE not configured")
+            )
         );
 
         return hostBuilder;
