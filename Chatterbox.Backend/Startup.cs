@@ -30,14 +30,7 @@ public class Startup
                 .WithDynamoDBClient(sp.GetRequiredService<IAmazonDynamoDB>)
                 .Build()
         );
-        hostBuilder.Services.AddSingleton(sp =>
-            new ConnectionsStore(
-                sp.GetRequiredService<IAmazonDynamoDB>(),
-                sp.GetRequiredService<IDynamoDBContext>(),
-                Environment.GetEnvironmentVariable("CONNECTIONS_TABLE")
-                ?? throw new InvalidOperationException("CONNECTIONS_TABLE not configured")
-            )
-        );
+        hostBuilder.Services.AddSingleton<ConnectionsStore>();
 
         return hostBuilder;
     }

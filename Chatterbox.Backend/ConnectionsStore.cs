@@ -1,6 +1,7 @@
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DataModel;
 using Amazon.DynamoDBv2.Model;
+using Microsoft.Extensions.Configuration;
 
 namespace Chatterbox.Backend;
 
@@ -10,11 +11,12 @@ public sealed class ConnectionsStore
     private readonly IDynamoDBContext _context;
     private readonly string _tableName;
 
-    internal ConnectionsStore(IAmazonDynamoDB client, IDynamoDBContext context, string tableName)
+    public ConnectionsStore(IAmazonDynamoDB client, IDynamoDBContext context, IConfiguration configuration)
     {
         _client = client;
         _context = context;
-        _tableName = tableName;
+        _tableName = configuration["CONNECTIONS_TABLE"]
+            ?? throw new InvalidOperationException("CONNECTIONS_TABLE not configured");
     }
 
     internal Task<PresenceRecord?> LoadByDisplayNameAsync(string displayName) =>
