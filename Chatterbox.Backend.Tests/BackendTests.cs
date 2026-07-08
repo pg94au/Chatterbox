@@ -2,6 +2,7 @@
 using NUnit.Framework;
 using System.Diagnostics;
 using System.IO.Compression;
+using System.Net.WebSockets;
 using Testcontainers.Floci;
 
 namespace Chatterbox.Backend.Tests;
@@ -47,7 +48,22 @@ public class BackendTests
         endpoint.Should().NotBe("None");
         Console.WriteLine(endpoint);
 
+        // Extract port from _awsEndpoint
+        var port = new Uri(_awsEndpoint).Port;
 
+        var localEndpoint = endpoint.Replace("wss://", "ws://").Replace("amazonaws.com", $"localhost.floci.io:{port}");
+
+        var endpointUri = new Uri(endpoint);
+
+        // Test WebSocket connection
+        using var webSocket = new ClientWebSocket();
+        webSocket.Options.SetRequestHeader("Host", endpointUri.Host);
+        using var cancellationTokenSource = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+
+        await webSocket.ConnectAsync(new Uri(localEndpoint), cancellationTokenSource.Token);
+
+        webSocket.State.Should().Be(WebSocketState.Open);
+        Console.WriteLine($"Successfully connected to WebSocket at {localEndpoint}");
     }
 
     private static string FindRepositoryRoot()
