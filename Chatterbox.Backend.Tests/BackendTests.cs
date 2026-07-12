@@ -11,7 +11,7 @@ namespace Chatterbox.Backend.Tests;
 [TestFixture]
 public class BackendTests
 {
-    private IContainer _container = null!;
+    private IContainer? _container;
     private string _awsEndpoint = string.Empty;
 
     [SetUp]
