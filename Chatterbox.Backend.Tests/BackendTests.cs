@@ -3,28 +3,40 @@ using NUnit.Framework;
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Net.WebSockets;
-using Testcontainers.Floci;
+using DotNet.Testcontainers.Builders;
+using DotNet.Testcontainers.Containers;
 
 namespace Chatterbox.Backend.Tests;
 
 [TestFixture]
 public class BackendTests
 {
-    private readonly FlociContainer _container = new FlociBuilder("floci/floci:latest").Build();
+    private IContainer _container = null!;
     private string _awsEndpoint = string.Empty;
 
     [SetUp]
     public async Task Setup()
     {
+        _container = new ContainerBuilder("ministackorg/ministack:latest")
+            .WithName($"ministack-test-{Guid.NewGuid():N}")
+            .WithEnvironment("LOG_LEVEL", "DEBUG")
+            .WithPortBinding(0, 4566)
+            .Build();
+
         await _container.StartAsync();
 
-        _awsEndpoint = _container.GetConnectionString();
+        var hostPort = _container.GetMappedPublicPort(4566);
+        _awsEndpoint = $"http://localhost:{hostPort}";
     }
 
     [TearDown]
     public async Task Teardown()
     {
-        await _container.StopAsync();
+        if (_container is not null)
+        {
+            await _container.StopAsync();
+            await _container.DisposeAsync();
+        }
     }
 
     [Test]
@@ -51,19 +63,22 @@ public class BackendTests
         // Extract port from _awsEndpoint
         var port = new Uri(_awsEndpoint).Port;
 
-        var localEndpoint = endpoint.Replace("wss://", "ws://").Replace("amazonaws.com", $"localhost.floci.io:{port}");
-
+        // Endpoint is wss://{apiId}.execute-api.{region}.amazonaws.com/{stage}
+        // MiniStack routes WebSocket APIs via LocalStack-compat path:
+        //   ws://localhost:{port}/_aws/execute-api/{apiId}/{stage}
         var endpointUri = new Uri(endpoint);
+        var apiId = endpointUri.Host.Split('.')[0];
+        var stage = endpointUri.AbsolutePath.TrimStart('/');
+        var wsEndpoint = new UriBuilder("ws", "localhost", port, $"/_aws/execute-api/{apiId}/{stage}").Uri;
 
         // Test WebSocket connection
         using var webSocket = new ClientWebSocket();
-        webSocket.Options.SetRequestHeader("Host", endpointUri.Host);
         using var cancellationTokenSource = new CancellationTokenSource(TimeSpan.FromSeconds(30));
 
-        await webSocket.ConnectAsync(new Uri(localEndpoint), cancellationTokenSource.Token);
+        await webSocket.ConnectAsync(wsEndpoint, cancellationTokenSource.Token);
 
         webSocket.State.Should().Be(WebSocketState.Open);
-        Console.WriteLine($"Successfully connected to WebSocket at {localEndpoint}");
+        Console.WriteLine($"Successfully connected to WebSocket at {wsEndpoint}");
     }
 
     private static string FindRepositoryRoot()
@@ -119,7 +134,7 @@ public class BackendTests
 
     private async Task UploadArtifactAsync(string bucketName, string s3Key, string packagePath)
     {
-        await RunAwsAsync($"s3 cp \"{packagePath}\" s3://{bucketName}/{s3Key}");
+        await RunAwsAsync($"s3 cp \"{packagePath}\" s3://{bucketName}/{s3Key} --checksum-algorithm SHA256");
     }
 
     private async Task<string> DeployStackAsync(string repositoryRoot, string bucketName, string s3Key, string stackName, string stageName, string tableName)

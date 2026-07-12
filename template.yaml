@@ -204,27 +204,13 @@ Resources:
       AuthorizationType: NONE
       Target: !Sub 'integrations/${WebSocketIntegration}'
 
-  # Deployment
-  WebSocketDeployment:
-    Type: AWS::ApiGatewayV2::Deployment
-    DependsOn:
-      - ConnectRoute
-      - DisconnectRoute
-      - RegisterRoute
-      - ListUsersRoute
-      - MessageRoute
-    Properties:
-      ApiId: !Ref WebSocketApi
-      Description: WebSocket deployment for the Chatterbox backend
-
   # Stage
   WebSocketStage:
     Type: AWS::ApiGatewayV2::Stage
     Properties:
       ApiId: !Ref WebSocketApi
       StageName: !Ref StageName
-      DeploymentId: !Ref WebSocketDeployment
-      AutoDeploy: false
+      AutoDeploy: true
       AccessLogSettings:
         DestinationArn: !GetAtt WebSocketAccessLogGroup.Arn
         Format: '{"requestId":"$context.requestId","eventType":"$context.eventType","routeKey":"$context.routeKey","connectionId":"$context.connectionId","status":"$context.status","ip":"$context.identity.sourceIp","userAgent":"$context.identity.userAgent","requestTime":"$context.requestTime"}'
