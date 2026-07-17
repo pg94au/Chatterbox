@@ -9,7 +9,10 @@ param(
 	[string]$Environment = "prod",
 
 	[Parameter(Mandatory=$false)]
-	[string]$Region = "ca-central-1"
+	[string]$Region = "ca-central-1",
+
+	[Parameter(Mandatory=$false)]
+	[string]$AwsEndpointUrl = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -29,7 +32,24 @@ Write-Host "S3 Bucket: $S3Bucket" -ForegroundColor Yellow
 Write-Host "Stage: $StageName" -ForegroundColor Yellow
 Write-Host "Table: $TableName" -ForegroundColor Yellow
 Write-Host "Region: $Region" -ForegroundColor Yellow
+if ($AwsEndpointUrl) {
+	Write-Host "AWS Endpoint: $AwsEndpointUrl" -ForegroundColor Yellow
+}
 Write-Host ""
+
+function Invoke-AwsCli {
+	param(
+		[Parameter(Mandatory=$true)]
+		[string[]]$Arguments
+	)
+
+	$invokeArgs = @()
+	if ($AwsEndpointUrl) {
+		$invokeArgs += @('--endpoint-url', $AwsEndpointUrl)
+	}
+
+	& aws @Arguments @invokeArgs
+}
 
 # Step 1: Build Lambda
 Write-Host "[1/5] Building Lambda function..." -ForegroundColor Green
@@ -79,10 +99,12 @@ $tempLifecyclePath = Join-Path $env:TEMP "chatterbox-lifecycle-$Environment.json
 Set-Content -Path $tempLifecyclePath -Value $lifecycleConfiguration -Encoding utf8
 $tempLifecycleUri = "file://" + ($tempLifecyclePath -replace '\\', '/')
 try {
-	aws s3api put-bucket-lifecycle-configuration `
-		--bucket $S3Bucket `
-		--lifecycle-configuration $tempLifecycleUri `
-		--region $Region
+	Invoke-AwsCli @(
+		's3api', 'put-bucket-lifecycle-configuration',
+		'--bucket', $S3Bucket,
+		'--lifecycle-configuration', $tempLifecycleUri,
+		'--region', $Region
+	)
 	if ($LASTEXITCODE -ne 0) {
 		throw "S3 lifecycle configuration failed"
 	}
@@ -115,7 +137,12 @@ $artifactHash = [System.BitConverter]::ToString(
 $artifactHash = $artifactHash.Substring(0, 12).ToLowerInvariant()
 
 $s3Key = "$artifactPrefix$Environment/$artifactHash/lambda.zip"
-aws s3 cp $zipPath "s3://$S3Bucket/$s3Key" --region $Region
+$uploadArguments = @('s3', 'cp', $zipPath, "s3://$S3Bucket/$s3Key", '--region', $Region)
+if ($AwsEndpointUrl) {
+	$uploadArguments += @('--checksum-algorithm', 'SHA256')
+}
+
+Invoke-AwsCli -Arguments $uploadArguments
 if ($LASTEXITCODE -ne 0) {
 	throw "S3 upload failed"
 }
@@ -123,17 +150,27 @@ Write-Host "  ✓ Uploaded to s3://$S3Bucket/$s3Key" -ForegroundColor Gray
 
 # Step 5: Deploy CloudFormation
 Write-Host "[5/5] Deploying CloudFormation stack..." -ForegroundColor Green
-aws cloudformation deploy `
-	--template-file template.yaml `
-	--stack-name $StackName `
-	--parameter-overrides `
-		Environment=$Environment `
-		TableName=$TableName `
-		LambdaCodeBucket=$S3Bucket `
-		LambdaCodeKey=$s3Key `
-		StageName=$StageName `
-	--capabilities CAPABILITY_NAMED_IAM `
-	--region $Region
+$deployArgs = @(
+	'cloudformation', 'deploy',
+	'--template-file', 'template.yaml',
+	'--stack-name', $StackName,
+	'--parameter-overrides',
+		"Environment=$Environment",
+		"TableName=$TableName",
+		"LambdaCodeBucket=$S3Bucket",
+		"LambdaCodeKey=$s3Key",
+		"StageName=$StageName",
+	'--capabilities', 'CAPABILITY_NAMED_IAM',
+	'--region', $Region
+)
+
+	if ($AwsEndpointUrl) {
+		$deployArgs += @('--endpoint-url', $AwsEndpointUrl)
+	}
+
+	Write-Host @deployArgs
+
+	& aws @deployArgs
 
 if ($LASTEXITCODE -ne 0) {
 	throw "CloudFormation deployment failed"
@@ -150,6 +187,22 @@ $endpoint = aws cloudformation describe-stacks `
 	--query 'Stacks[0].Outputs[?OutputKey==`WebSocketEndpoint`].OutputValue' `
 	--output text `
 	--region $Region
+
+if ($AwsEndpointUrl) {
+	$endpointArgs = @('--endpoint-url', $AwsEndpointUrl)
+	$endpoint = & aws cloudformation describe-stacks `
+		--stack-name $StackName `
+		--query 'Stacks[0].Outputs[?OutputKey==`WebSocketEndpoint`].OutputValue' `
+		--output text `
+		--region $Region `
+		@endpointArgs
+} else {
+	$endpoint = & aws cloudformation describe-stacks `
+		--stack-name $StackName `
+		--query 'Stacks[0].Outputs[?OutputKey==`WebSocketEndpoint`].OutputValue' `
+		--output text `
+		--region $Region
+}
 
 Write-Host "WebSocket Endpoint: $endpoint" -ForegroundColor Green
 Write-Host ""
