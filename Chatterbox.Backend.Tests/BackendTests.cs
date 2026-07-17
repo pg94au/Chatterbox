@@ -19,8 +19,10 @@ public class BackendTests
     {
         _container = new ContainerBuilder("ministackorg/ministack:latest")
             .WithName($"ministack-test-{Guid.NewGuid():N}")
+            .WithEnvironment("LAMBDA_EXECUTOR", "docker")
             .WithEnvironment("LOG_LEVEL", "DEBUG")
             .WithPortBinding(0, 4566)
+            .WithBindMount("/var/run/docker.sock", "/var/run/docker.sock")
             .Build();
 
         await _container.StartAsync();
