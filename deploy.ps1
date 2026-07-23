@@ -52,7 +52,7 @@ function Invoke-AwsCli {
 }
 
 # Step 1: Build Lambda
-Write-Host "[1/5] Building Lambda function..." -ForegroundColor Green
+Write-Host "[1/6] Building Lambda function..." -ForegroundColor Green
 Push-Location $BackendRoot
 try {
 	dotnet publish -c Release -o publish
@@ -66,7 +66,7 @@ finally {
 }
 
 # Step 2: Package Lambda
-Write-Host "[2/5] Packaging Lambda ZIP..." -ForegroundColor Green
+Write-Host "[2/6] Packaging Lambda ZIP..." -ForegroundColor Green
 $zipPath = Join-Path $BackendRoot "publish\lambda.zip"
 if (Test-Path $zipPath) {
 	Remove-Item $zipPath -Force
@@ -74,9 +74,36 @@ if (Test-Path $zipPath) {
 Compress-Archive -Path (Join-Path $BackendRoot "publish\*") -DestinationPath $zipPath -Force
 Write-Host "  ✓ Package created: $zipPath" -ForegroundColor Gray
 
-# Step 3: Apply S3 lifecycle policy
-Write-Host "[3/5] Applying S3 lifecycle policy..." -ForegroundColor Green
+# Step 3: Ensure S3 bucket exists
+Write-Host "[3/6] Checking S3 bucket..." -ForegroundColor Green
 $artifactPrefix = "chatterbox-"
+$bucketCheckArguments = @('s3api', 'head-bucket', '--bucket', $S3Bucket, '--region', $Region)
+Invoke-AwsCli -Arguments $bucketCheckArguments 2>$null
+
+if ($LASTEXITCODE -ne 0) {
+	Write-Host "  ! Bucket '$S3Bucket' does not exist." -ForegroundColor Yellow
+	$createBucketResponse = Read-Host "Create bucket '$S3Bucket' in region '$Region'? (y/N)"
+	if ($createBucketResponse -notmatch '^(?i:y|yes)$') {
+		throw "S3 bucket '$S3Bucket' does not exist. Deployment cancelled."
+	}
+
+	$createBucketArguments = @('s3api', 'create-bucket', '--bucket', $S3Bucket, '--region', $Region)
+	if ($Region -ne 'us-east-1') {
+		$createBucketArguments += @('--create-bucket-configuration', "LocationConstraint=$Region")
+	}
+
+	Invoke-AwsCli -Arguments $createBucketArguments
+	if ($LASTEXITCODE -ne 0) {
+		throw "S3 bucket creation failed"
+	}
+
+	Write-Host "  ✓ Bucket created" -ForegroundColor Gray
+} else {
+	Write-Host "  ✓ Bucket exists" -ForegroundColor Gray
+}
+
+# Step 4: Apply S3 lifecycle policy
+Write-Host "[4/6] Applying S3 lifecycle policy..." -ForegroundColor Green
 $lifecycleConfiguration = @{
 	Rules = @(
 		@{
@@ -116,8 +143,8 @@ finally {
 	}
 }
 
-# Step 4: Upload to S3
-Write-Host "[4/5] Uploading to S3..." -ForegroundColor Green
+# Step 5: Upload to S3
+Write-Host "[5/6] Uploading to S3..." -ForegroundColor Green
 $artifactInputs = Get-ChildItem -Path $BackendRoot -Recurse -File |
 	Where-Object {
 		$_.FullName -notmatch '\\(bin|obj|publish)\\' -and
@@ -148,8 +175,8 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host "  ✓ Uploaded to s3://$S3Bucket/$s3Key" -ForegroundColor Gray
 
-# Step 5: Deploy CloudFormation
-Write-Host "[5/5] Deploying CloudFormation stack..." -ForegroundColor Green
+# Step 6: Deploy CloudFormation
+Write-Host "[6/6] Deploying CloudFormation stack..." -ForegroundColor Green
 $deployArgs = @(
 	'cloudformation', 'deploy',
 	'--template-file', 'template.yaml',
