@@ -5,12 +5,12 @@ Parameters:
   LambdaCodeBucket:
     Type: String
     Description: 'S3 bucket containing the Lambda deployment package'
-    Default: ''
+    MinLength: 3
 
   LambdaCodeKey:
     Type: String
     Description: 'S3 key (path) to the Lambda ZIP file'
-    Default: 'chatterbox-backend/lambda.zip'
+    MinLength: 1
 
   LambdaHandler:
     Type: String
@@ -30,9 +30,6 @@ Parameters:
     Type: String
     Description: 'DynamoDB table name for connection tracking'
     Default: 'chatterbox-connections'
-
-Conditions:
-  UseS3Code: !Not [!Equals [!Ref LambdaCodeBucket, '']]
 
 Resources:
   # DynamoDB Table for connection tracking
@@ -118,13 +115,9 @@ Resources:
       Runtime: dotnet10
       Handler: !Ref LambdaHandler
       Role: !GetAtt LambdaExecutionRole.Arn
-      Code: !If
-        - UseS3Code
-        - S3Bucket: !Ref LambdaCodeBucket
-          S3Key: !Ref LambdaCodeKey
-        - ZipFile: |
-            // Placeholder - deploy with S3 code location
-            public class Handler { }
+      Code:
+        S3Bucket: !Ref LambdaCodeBucket
+        S3Key: !Ref LambdaCodeKey
       MemorySize: 512
       Timeout: 30
       Environment:
