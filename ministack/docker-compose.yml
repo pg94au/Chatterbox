@@ -1,0 +1,22 @@
+services:
+  ministack:
+    image: ministackorg/ministack:latest
+    container_name: ministack
+    ports:
+      - "4566:4566"
+    environment:
+      - LOG_LEVEL=DEBUG
+      - LAMBDA_EXECUTOR=docker
+      - DOCKER_NETWORK=ministack_infra_network
+      - PERSIST_STATE=1
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data/state:/tmp/ministack-state
+      - ./data/s3:/tmp/ministack-data/s3
+    networks:
+      - infra_network
+
+networks:
+  infra_network:
+    name: ministack_infra_network
+
