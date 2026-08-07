@@ -1,0 +1,20 @@
+services:
+  floci:
+    image: floci/floci:latest
+    container_name: floci
+    ports:
+      - "4566:4566"
+    volumes:
+      - ./data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - FLOCI_WS_ALLOW_ORIGIN=*
+      - LAMBDA_EXECUTOR=docker
+      - LOG_LEVEL=DEBUG
+    networks:
+      - floci_network
+
+networks:
+  floci_network:
+    name: floci_network
+

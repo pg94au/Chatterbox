@@ -51,6 +51,27 @@ function Invoke-AwsCli {
 	& aws @Arguments @invokeArgs
 }
 
+function Get-WebSocketApiEndpoint {
+	param(
+		[Parameter(Mandatory=$false)]
+		[string]$EndpointUrl
+	)
+
+	if (-not $EndpointUrl) {
+		return ""
+	}
+
+	$uri = [System.Uri]$EndpointUrl
+	$hostName = $uri.Host
+	if ($hostName -eq "localhost") {
+		$hostName = "host.docker.internal"
+	}
+
+	$builder = New-Object System.UriBuilder($uri.Scheme, $hostName, $uri.Port)
+	$builder.Path = $uri.AbsolutePath.TrimEnd('/')
+	return $builder.Uri.ToString().TrimEnd('/')
+}
+
 # Step 1: Build Lambda
 Write-Host "[1/6] Building Lambda function..." -ForegroundColor Green
 Push-Location $BackendRoot
@@ -177,27 +198,39 @@ Write-Host "  ✓ Uploaded to s3://$S3Bucket/$s3Key" -ForegroundColor Gray
 
 # Step 6: Deploy CloudFormation
 Write-Host "[6/6] Deploying CloudFormation stack..." -ForegroundColor Green
+$parameterOverrides = @(
+	"Environment=$Environment",
+	"TableName=$TableName",
+	"LambdaCodeBucket=$S3Bucket",
+	"LambdaCodeKey=$s3Key",
+	"StageName=$StageName"
+)
+
+if ($AwsEndpointUrl) {
+	$websocketApiEndpoint = Get-WebSocketApiEndpoint -EndpointUrl $AwsEndpointUrl
+	if ($websocketApiEndpoint) {
+		$parameterOverrides += "WebSocketApiEndpoint=$websocketApiEndpoint"
+		Write-Host "  WebSocket API endpoint for Lambda: $websocketApiEndpoint" -ForegroundColor Gray
+	}
+}
+
 $deployArgs = @(
 	'cloudformation', 'deploy',
 	'--template-file', 'template.yaml',
 	'--stack-name', $StackName,
 	'--parameter-overrides',
-		"Environment=$Environment",
-		"TableName=$TableName",
-		"LambdaCodeBucket=$S3Bucket",
-		"LambdaCodeKey=$s3Key",
-		"StageName=$StageName",
+		$parameterOverrides,
 	'--capabilities', 'CAPABILITY_NAMED_IAM',
 	'--region', $Region
 )
 
-	if ($AwsEndpointUrl) {
-		$deployArgs += @('--endpoint-url', $AwsEndpointUrl)
-	}
+if ($AwsEndpointUrl) {
+	$deployArgs += @('--endpoint-url', $AwsEndpointUrl)
+}
 
-	Write-Host @deployArgs
+Write-Host @deployArgs
 
-	& aws @deployArgs
+& aws @deployArgs
 
 if ($LASTEXITCODE -ne 0) {
 	throw "CloudFormation deployment failed"

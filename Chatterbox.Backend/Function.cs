@@ -218,7 +218,12 @@ public class Functions
 
     private IAmazonApiGatewayManagementApi CreateManagementClient(APIGatewayProxyRequest request)
     {
-        var endpoint = $"https://{request.RequestContext.DomainName}/{request.RequestContext.Stage}";
+        var overrideEndpoint = Environment.GetEnvironmentVariable("WEBSOCKET_API_ENDPOINT");
+        var endpoint = string.IsNullOrWhiteSpace(overrideEndpoint)
+            ? $"https://{request.RequestContext.DomainName}/{request.RequestContext.Stage}"
+            : $"{overrideEndpoint.TrimEnd('/')}/_aws/execute-api/{request.RequestContext.ApiId}/{request.RequestContext.Stage}";
+
+        _logger.LogInformation("Endpoint: {Endpoint}", endpoint);
 
         return new AmazonApiGatewayManagementApiClient(
             new AmazonApiGatewayManagementApiConfig
@@ -238,8 +243,9 @@ public class Functions
             {
                 await SendToConnection(apiClient, item.ConnectionId, payload);
             }
-            catch
+            catch (Exception ex)
             {
+                _logger.LogWarning(ex, "Failed to send message to connection {ConnectionId}", item.ConnectionId);
             }
         }
     }

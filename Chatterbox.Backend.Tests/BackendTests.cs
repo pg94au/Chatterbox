@@ -3,8 +3,12 @@ using NUnit.Framework;
 using System.Diagnostics;
 using System.IO.Compression;
 using System.Net.WebSockets;
+using System.Text;
+using System.Text.Json;
 using DotNet.Testcontainers.Builders;
+using DotNet.Testcontainers.Configurations;
 using DotNet.Testcontainers.Containers;
+using Testcontainers.Floci;
 
 namespace Chatterbox.Backend.Tests;
 
@@ -17,18 +21,38 @@ public class BackendTests
     [SetUp]
     public async Task Setup()
     {
-        _container = new ContainerBuilder("ministackorg/ministack:latest")
-            .WithName($"ministack-test-{Guid.NewGuid():N}")
-            .WithEnvironment("LAMBDA_EXECUTOR", "docker")
-            .WithEnvironment("LOG_LEVEL", "DEBUG")
-            .WithPortBinding(0, 4566)
-            .WithBindMount("/var/run/docker.sock", "/var/run/docker.sock")
+        //_container = new ContainerBuilder("ministackorg/ministack:latest")
+        //    .WithName($"ministack-test-{Guid.NewGuid():N}")
+        //    .WithEnvironment("LAMBDA_EXECUTOR", "docker")
+        //    .WithEnvironment("LOG_LEVEL", "DEBUG")
+        //    .WithPortBinding(0, 4566)
+        //    .WithBindMount("/var/run/docker.sock", "/var/run/docker.sock")
+        //    .Build();
+
+        //await _container.StartAsync();
+
+        //var hostPort = _container.GetMappedPublicPort(4566);
+        //_awsEndpoint = $"http://localhost:{hostPort}";
+
+        var flociContainer = new FlociBuilder("floci/floci:1.5.33")
+            .WithName($"floci-{Guid.NewGuid()}")
+            .WithBindMount("/var/run/docker.sock", "/var/run/docker.sock", AccessMode.ReadWrite)
+            .WithPortBinding(4566, true)
+            .WithEnvironment("FLOCI_DEFAULT_REGION", "ca-central-1")
+            .WithEnvironment("AWS_DEFAULT_REGION", "ca-central-1")
+            .WithEnvironment("AWS_REGION", "ca-central-1")
+            .WithWaitStrategy(
+                Wait.ForUnixContainer()
+                    .UntilHttpRequestIsSucceeded(request =>
+                        request.ForPort(4566)
+                            .ForPath("/_localstack/health")))
             .Build();
 
-        await _container.StartAsync();
+        await flociContainer.StartAsync();
 
-        var hostPort = _container.GetMappedPublicPort(4566);
-        _awsEndpoint = $"http://localhost:{hostPort}";
+        _awsEndpoint = flociContainer.GetConnectionString();
+
+        _container = flociContainer;
     }
 
     [TearDown]
@@ -56,22 +80,21 @@ public class BackendTests
 
         await EnsureBucketExistsAsync(bucketName);
         await UploadArtifactAsync(bucketName, s3Key, packagePath);
-        var endpoint = await DeployStackAsync(repositoryRoot, bucketName, s3Key, stackName, stageName, tableName);
+        var websocketApiEndpoint = GetWebSocketApiEndpointForLambda();
+        var endpoint = await DeployStackAsync(repositoryRoot, bucketName, s3Key, stackName, stageName, tableName, websocketApiEndpoint);
 
         endpoint.Should().NotBeNullOrWhiteSpace();
         endpoint.Should().NotBe("None");
         Console.WriteLine(endpoint);
 
-        // Extract port from _awsEndpoint
-        var port = new Uri(_awsEndpoint).Port;
-
         // Endpoint is wss://{apiId}.execute-api.{region}.amazonaws.com/{stage}
-        // MiniStack routes WebSocket APIs via LocalStack-compat path:
-        //   ws://localhost:{port}/_aws/execute-api/{apiId}/{stage}
         var endpointUri = new Uri(endpoint);
         var apiId = endpointUri.Host.Split('.')[0];
         var stage = endpointUri.AbsolutePath.TrimStart('/');
-        var wsEndpoint = new UriBuilder("ws", "localhost", port, $"/_aws/execute-api/{apiId}/{stage}").Uri;
+
+        // Extract port from _awsEndpoint for the WebSocket client connection.
+        var port = new Uri(_awsEndpoint).Port;
+        var wsEndpoint = new UriBuilder("ws", "localhost", port, $"/ws/{apiId}/{stage}").Uri;
 
         // Test WebSocket connection
         using var webSocket = new ClientWebSocket();
@@ -81,6 +104,26 @@ public class BackendTests
 
         webSocket.State.Should().Be(WebSocketState.Open);
         Console.WriteLine($"Successfully connected to WebSocket at {wsEndpoint}");
+
+        const string displayName = "Alice";
+        var registerMessage = Encoding.UTF8.GetBytes($"{{\"action\":\"register\",\"displayName\":\"{displayName}\"}}");
+
+        await webSocket.SendAsync(
+            registerMessage,
+            WebSocketMessageType.Text,
+            endOfMessage: true,
+            cancellationTokenSource.Token);
+
+        var receiveBuffer = new byte[4096];
+        var received = await webSocket.ReceiveAsync(receiveBuffer, cancellationTokenSource.Token);
+
+        received.MessageType.Should().Be(WebSocketMessageType.Text);
+
+        using var message = JsonDocument.Parse(receiveBuffer.AsMemory(0, received.Count));
+        var root = message.RootElement;
+
+        root.GetProperty("type").GetString().Should().Be("registered");
+        root.GetProperty("displayName").GetString().Should().Be(displayName);
     }
 
     private static string FindRepositoryRoot()
@@ -139,13 +182,31 @@ public class BackendTests
         await RunAwsAsync($"s3 cp \"{packagePath}\" s3://{bucketName}/{s3Key} --checksum-algorithm SHA256");
     }
 
-    private async Task<string> DeployStackAsync(string repositoryRoot, string bucketName, string s3Key, string stackName, string stageName, string tableName)
+    private async Task<string> DeployStackAsync(string repositoryRoot, string bucketName, string s3Key, string stackName, string stageName, string tableName, string websocketApiEndpoint)
     {
         await RunAwsAsync(
-            $"cloudformation deploy --template-file \"{Path.Combine(repositoryRoot, "template.yaml")}\" --stack-name {stackName} --parameter-overrides Environment={stageName} TableName={tableName} LambdaCodeBucket={bucketName} LambdaCodeKey={s3Key} StageName={stageName} --capabilities CAPABILITY_NAMED_IAM");
+            $"cloudformation deploy --template-file \"{Path.Combine(repositoryRoot, "template.yaml")}\" --stack-name {stackName} --parameter-overrides Environment={stageName} TableName={tableName} LambdaCodeBucket={bucketName} LambdaCodeKey={s3Key} StageName={stageName} WebSocketApiEndpoint={websocketApiEndpoint} --capabilities CAPABILITY_NAMED_IAM");
 
         return await RunAwsAsync(
             $"cloudformation describe-stacks --stack-name {stackName} --query \"Stacks[0].Outputs[?OutputKey=='WebSocketEndpoint'].OutputValue | [0]\" --output text");
+    }
+
+    private string GetWebSocketApiEndpointForLambda()
+    {
+        var uri = new Uri(_awsEndpoint);
+
+        // The Lambda runs inside a Docker container, so localhost points to itself.
+        // Use the host gateway name so the Lambda can reach the Floci container.
+        var host = uri.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+            ? "host.docker.internal"
+            : uri.Host;
+
+        var builder = new UriBuilder(uri.Scheme, host, uri.Port)
+        {
+            Path = uri.AbsolutePath.TrimEnd('/')
+        };
+
+        return builder.Uri.ToString().TrimEnd('/');
     }
 
     private async Task<string> RunAwsAsync(string arguments)

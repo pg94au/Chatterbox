@@ -3,6 +3,7 @@
   <Folder Name="/Deployment/">
     <File Path="CLOUDFORMATION.md" />
     <File Path="deploy.ps1" />
+    <File Path="docker-compose.yml" />
     <File Path="README-CLOUDFORMATION.md" />
     <File Path="template.yaml" />
   </Folder>
