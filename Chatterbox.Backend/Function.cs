@@ -218,19 +218,20 @@ public class Functions
 
     private IAmazonApiGatewayManagementApi CreateManagementClient(APIGatewayProxyRequest request)
     {
-        var overrideEndpoint = Environment.GetEnvironmentVariable("WEBSOCKET_API_ENDPOINT");
-        var endpoint = string.IsNullOrWhiteSpace(overrideEndpoint)
-            ? $"https://{request.RequestContext.DomainName}/{request.RequestContext.Stage}"
-            : $"{overrideEndpoint.TrimEnd('/')}/_aws/execute-api/{request.RequestContext.ApiId}/{request.RequestContext.Stage}";
+        var apiId = request.RequestContext.ApiId;
+        var stage = request.RequestContext.Stage;
 
-        _logger.LogInformation("Endpoint: {Endpoint}", endpoint);
+        var endpoint = $"http://floci:4566/execute-api/{apiId}/{stage}";
+        //var endpoint = $"https://{request.RequestContext.DomainName}/{request.RequestContext.Stage}";
 
-        return new AmazonApiGatewayManagementApiClient(
-            new AmazonApiGatewayManagementApiConfig
-            {
-                ServiceURL = endpoint
-            }
-        );
+        var config = new AmazonApiGatewayManagementApiConfig
+        {
+            ServiceURL = endpoint
+        };
+
+        var mgmt = new AmazonApiGatewayManagementApiClient(config);
+
+        return mgmt;
     }
 
     private async Task Broadcast(IAmazonApiGatewayManagementApi apiClient, object payload)
