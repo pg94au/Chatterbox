@@ -15,7 +15,7 @@ param(
 	[string]$AwsServiceUrl = "",
 
 	[Parameter(Mandatory=$false)]
-	[string]$AwsInternalEndpoint = ""
+	[string]$AwsInternalServiceUrl = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,10 +36,10 @@ Write-Host "Stage: $StageName" -ForegroundColor Yellow
 Write-Host "Table: $TableName" -ForegroundColor Yellow
 Write-Host "Region: $Region" -ForegroundColor Yellow
 if ($AwsServiceUrl) {
-	Write-Host "AWS Endpoint: $AwsServiceUrl" -ForegroundColor Yellow
+	Write-Host "AWS Service Url: $AwsServiceUrl" -ForegroundColor Yellow
 }
-if ($AwsInternalEndpoint) {
-	Write-Host "AWS Internal Endpoint: $AwsInternalEndpoint" -ForegroundColor Yellow
+if ($AwsInternalServiceUrl) {
+	Write-Host "AWS Internal Service Url: $AwsInternalServiceUrl" -ForegroundColor Yellow
 }
 Write-Host ""
 
@@ -55,27 +55,6 @@ function Invoke-AwsCli {
 	}
 
 	& aws @Arguments @invokeArgs
-}
-
-function Get-WebSocketApiEndpoint {
-	param(
-		[Parameter(Mandatory=$false)]
-		[string]$EndpointUrl
-	)
-
-	if (-not $EndpointUrl) {
-		return ""
-	}
-
-	$uri = [System.Uri]$EndpointUrl
-	$hostName = $uri.Host
-	if ($hostName -eq "localhost") {
-		$hostName = "host.docker.internal"
-	}
-
-	$builder = New-Object System.UriBuilder($uri.Scheme, $hostName, $uri.Port)
-	$builder.Path = $uri.AbsolutePath.TrimEnd('/')
-	return $builder.Uri.ToString().TrimEnd('/')
 }
 
 # Step 1: Build Lambda
@@ -192,9 +171,6 @@ $artifactHash = $artifactHash.Substring(0, 12).ToLowerInvariant()
 
 $s3Key = "$artifactPrefix$Environment/$artifactHash/lambda.zip"
 $uploadArguments = @('s3', 'cp', $zipPath, "s3://$S3Bucket/$s3Key", '--region', $Region)
-#if ($AwsServiceUrl) {
-#	$uploadArguments += @('--checksum-algorithm', 'SHA256')
-#}
 
 Invoke-AwsCli -Arguments $uploadArguments
 if ($LASTEXITCODE -ne 0) {
@@ -212,17 +188,15 @@ $parameterOverrides = @(
 	"StageName=$StageName"
 )
 
-if ($AwsServiceUrl) {
-	$websocketApiEndpoint = Get-WebSocketApiEndpoint -EndpointUrl $AwsServiceUrl
-	if ($websocketApiEndpoint) {
-		$parameterOverrides += "WebSocketApiEndpoint=$websocketApiEndpoint"
-		Write-Host "  WebSocket API endpoint for Lambda: $websocketApiEndpoint" -ForegroundColor Gray
-	}
+if ($AwsInternalServiceUrl) {
+	$parameterOverrides += "AwsServiceUrl=$AwsInternalServiceUrl"
+	Write-Host "  AwsServiceUrl: $AwsInternalServiceUrl" -ForegroundColor Gray
 }
-
-if ($AwsInternalEndpoint) {
-	$parameterOverrides += "AwsInternalEndpoint=$AwsInternalEndpoint"
-	Write-Host "  AWS Internal Endpoint for Lambda: $AwsInternalEndpoint" -ForegroundColor Gray
+else {
+	if ($AwsServiceUrl) {
+		$parameterOverrides += "AwsServiceUrl=$AwsServiceUrl"
+		Write-Host "  AwsServiceUrl: $AwsServiceUrl" -ForegroundColor Gray
+	}
 }
 
 $deployArgs = @(

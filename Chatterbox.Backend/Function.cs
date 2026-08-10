@@ -221,11 +221,14 @@ public class Functions
         var apiId = request.RequestContext.ApiId;
         var stage = request.RequestContext.Stage;
 
-        var awsInternalEndpoint = Environment.GetEnvironmentVariable("AWS_INTERNAL_ENDPOINT");
+        var awsServiceUrlValue = Environment.GetEnvironmentVariable("AWS_SERVICE_URL");
+        var awsServiceUrl = string.IsNullOrWhiteSpace(awsServiceUrlValue)
+            ? null
+            : new Uri(awsServiceUrlValue);
 
-        var endpoint = string.IsNullOrWhiteSpace(awsInternalEndpoint)
+        var endpoint = awsServiceUrl == null
             ? $"https://{request.RequestContext.DomainName}/{request.RequestContext.Stage}"
-            : $"http://{awsInternalEndpoint}/execute-api/{apiId}/{stage}";
+            : $"{awsServiceUrl}/execute-api/{apiId}/{stage}";
 
         var config = new AmazonApiGatewayManagementApiConfig
         {

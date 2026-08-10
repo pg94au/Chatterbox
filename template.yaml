@@ -36,11 +36,6 @@ Parameters:
     Description: 'Override URL for the API Gateway management API endpoint'
     Default: ''
 
-  AwsInternalEndpoint:
-    Type: String
-    Description: 'Internal endpoint for AWS services'
-    Default: ''
-
 Resources:
   # DynamoDB Table for connection tracking
   ConnectionsTable:
@@ -134,7 +129,6 @@ Resources:
         Variables:
           CONNECTIONS_TABLE: !Ref ConnectionsTable
           AWS_SERVICE_URL: !Ref AwsServiceUrl
-          AWS_INTERNAL_ENDPOINT: !Ref AwsInternalEndpoint
       Tags:
         - Key: Application
           Value: Chatterbox
