@@ -221,8 +221,11 @@ public class Functions
         var apiId = request.RequestContext.ApiId;
         var stage = request.RequestContext.Stage;
 
-        var endpoint = $"http://floci:4566/execute-api/{apiId}/{stage}";
-        //var endpoint = $"https://{request.RequestContext.DomainName}/{request.RequestContext.Stage}";
+        var awsInternalEndpoint = Environment.GetEnvironmentVariable("AWS_INTERNAL_ENDPOINT");
+
+        var endpoint = string.IsNullOrWhiteSpace(awsInternalEndpoint)
+            ? $"https://{request.RequestContext.DomainName}/{request.RequestContext.Stage}"
+            : $"http://{awsInternalEndpoint}/execute-api/{apiId}/{stage}";
 
         var config = new AmazonApiGatewayManagementApiConfig
         {

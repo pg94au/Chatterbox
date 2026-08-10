@@ -31,9 +31,14 @@ Parameters:
     Description: 'DynamoDB table name for connection tracking'
     Default: 'chatterbox-connections'
 
-  WebSocketApiEndpoint:
+  AwsServiceUrl:
     Type: String
     Description: 'Override URL for the API Gateway management API endpoint'
+    Default: ''
+
+  AwsInternalEndpoint:
+    Type: String
+    Description: 'Internal endpoint for AWS services'
     Default: ''
 
 Resources:
@@ -128,7 +133,8 @@ Resources:
       Environment:
         Variables:
           CONNECTIONS_TABLE: !Ref ConnectionsTable
-          WEBSOCKET_API_ENDPOINT: !Ref WebSocketApiEndpoint
+          AWS_SERVICE_URL: !Ref AwsServiceUrl
+          AWS_INTERNAL_ENDPOINT: !Ref AwsInternalEndpoint
       Tags:
         - Key: Application
           Value: Chatterbox

@@ -12,7 +12,10 @@ param(
 	[string]$Region = "ca-central-1",
 
 	[Parameter(Mandatory=$false)]
-	[string]$AwsEndpointUrl = ""
+	[string]$AwsServiceUrl = "",
+
+	[Parameter(Mandatory=$false)]
+	[string]$AwsInternalEndpoint = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -32,8 +35,11 @@ Write-Host "S3 Bucket: $S3Bucket" -ForegroundColor Yellow
 Write-Host "Stage: $StageName" -ForegroundColor Yellow
 Write-Host "Table: $TableName" -ForegroundColor Yellow
 Write-Host "Region: $Region" -ForegroundColor Yellow
-if ($AwsEndpointUrl) {
-	Write-Host "AWS Endpoint: $AwsEndpointUrl" -ForegroundColor Yellow
+if ($AwsServiceUrl) {
+	Write-Host "AWS Endpoint: $AwsServiceUrl" -ForegroundColor Yellow
+}
+if ($AwsInternalEndpoint) {
+	Write-Host "AWS Internal Endpoint: $AwsInternalEndpoint" -ForegroundColor Yellow
 }
 Write-Host ""
 
@@ -44,8 +50,8 @@ function Invoke-AwsCli {
 	)
 
 	$invokeArgs = @()
-	if ($AwsEndpointUrl) {
-		$invokeArgs += @('--endpoint-url', $AwsEndpointUrl)
+	if ($AwsServiceUrl) {
+		$invokeArgs += @('--endpoint-url', $AwsServiceUrl)
 	}
 
 	& aws @Arguments @invokeArgs
@@ -186,9 +192,9 @@ $artifactHash = $artifactHash.Substring(0, 12).ToLowerInvariant()
 
 $s3Key = "$artifactPrefix$Environment/$artifactHash/lambda.zip"
 $uploadArguments = @('s3', 'cp', $zipPath, "s3://$S3Bucket/$s3Key", '--region', $Region)
-if ($AwsEndpointUrl) {
-	$uploadArguments += @('--checksum-algorithm', 'SHA256')
-}
+#if ($AwsServiceUrl) {
+#	$uploadArguments += @('--checksum-algorithm', 'SHA256')
+#}
 
 Invoke-AwsCli -Arguments $uploadArguments
 if ($LASTEXITCODE -ne 0) {
@@ -206,12 +212,17 @@ $parameterOverrides = @(
 	"StageName=$StageName"
 )
 
-if ($AwsEndpointUrl) {
-	$websocketApiEndpoint = Get-WebSocketApiEndpoint -EndpointUrl $AwsEndpointUrl
+if ($AwsServiceUrl) {
+	$websocketApiEndpoint = Get-WebSocketApiEndpoint -EndpointUrl $AwsServiceUrl
 	if ($websocketApiEndpoint) {
 		$parameterOverrides += "WebSocketApiEndpoint=$websocketApiEndpoint"
 		Write-Host "  WebSocket API endpoint for Lambda: $websocketApiEndpoint" -ForegroundColor Gray
 	}
+}
+
+if ($AwsInternalEndpoint) {
+	$parameterOverrides += "AwsInternalEndpoint=$AwsInternalEndpoint"
+	Write-Host "  AWS Internal Endpoint for Lambda: $AwsInternalEndpoint" -ForegroundColor Gray
 }
 
 $deployArgs = @(
@@ -224,8 +235,8 @@ $deployArgs = @(
 	'--region', $Region
 )
 
-if ($AwsEndpointUrl) {
-	$deployArgs += @('--endpoint-url', $AwsEndpointUrl)
+if ($AwsServiceUrl) {
+	$deployArgs += @('--endpoint-url', $AwsServiceUrl)
 }
 
 Write-Host @deployArgs
@@ -248,8 +259,8 @@ $endpoint = aws cloudformation describe-stacks `
 	--output text `
 	--region $Region
 
-if ($AwsEndpointUrl) {
-	$endpointArgs = @('--endpoint-url', $AwsEndpointUrl)
+if ($AwsServiceUrl) {
+	$endpointArgs = @('--endpoint-url', $AwsServiceUrl)
 	$endpoint = & aws cloudformation describe-stacks `
 		--stack-name $StackName `
 		--query 'Stacks[0].Outputs[?OutputKey==`WebSocketEndpoint`].OutputValue' `
