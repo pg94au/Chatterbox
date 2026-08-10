@@ -1,4 +1,0 @@
-name: chatterbox-infrastructure
-description: Pulumi stack for Chatterbox WebSocket backend infrastructure
-runtime: dotnet
-main: .
