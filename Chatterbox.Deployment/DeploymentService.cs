@@ -1,21 +1,13 @@
-using System;
-using System.Buffers;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Globalization;
-using System.IO;
-using System.IO.Compression;
-using System.Linq;
-using System.Security.Cryptography;
-using System.Text;
-using System.Threading;
-using System.Threading.Tasks;
 using Amazon;
+using Amazon.CDK;
 using Amazon.CloudFormation;
 using Amazon.CloudFormation.Model;
 using Amazon.S3;
 using Amazon.S3.Model;
-using Amazon.CDK;
+using System.Diagnostics;
+using System.IO.Compression;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace Chatterbox.Deployment;
 

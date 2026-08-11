@@ -7,10 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Amazon.CDK.Lib" Version="2.196.0" />
-    <PackageReference Include="Constructs" Version="10.4.2" />
-    <PackageReference Include="AWSSDK.CloudFormation" Version="4.0.101.3" />
-    <PackageReference Include="AWSSDK.S3" Version="4.0.101.3" />
+    <PackageReference Include="Amazon.CDK.Lib" Version="2.264.0" />
+    <PackageReference Include="Constructs" Version="10.8.1" />
+    <PackageReference Include="AWSSDK.CloudFormation" Version="4.0.102" />
+    <PackageReference Include="AWSSDK.S3" Version="4.0.102" />
   </ItemGroup>
 
 </Project>

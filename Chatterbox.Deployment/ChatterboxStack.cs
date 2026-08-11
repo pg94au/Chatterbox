@@ -4,6 +4,8 @@ using Amazon.CDK.AWS.DynamoDB;
 using Amazon.CDK.AWS.IAM;
 using Amazon.CDK.AWS.Lambda;
 using Amazon.CDK.AWS.Logs;
+using Constructs;
+using Environment = Amazon.CDK.Environment;
 
 namespace Chatterbox.Deployment;
 
