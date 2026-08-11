@@ -9,9 +9,17 @@ public class ExperimentalTests
 {
     private const string TemplateBody = @"
 AWSTemplateFormatVersion: '2010-09-09'
+Parameters:
+  BucketName:
+    Type: String
+    Description: 'The name of the bucket to create'
+    MinLength: 3
+
 Resources:
   MySimpleBucket:
     Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
 
 Outputs:
   CreatedBucketName:
@@ -41,7 +49,10 @@ Outputs:
         {
             StackName = stackName,
             TemplateBody = TemplateBody,
-            Parameters = new List<Parameter>(),
+            Parameters =
+            [
+                new Parameter { ParameterKey = "BucketName", ParameterValue = $"some-test-bucket-{Guid.NewGuid():N}" }
+            ],
             OnFailure = OnFailure.ROLLBACK, // Auto-cleanup if creation fails
         };
 
@@ -50,6 +61,8 @@ Outputs:
 
         // Wait in-process until CloudFormation finishes deploying the infrastructure
         await WaitForStackStatusAsync(stackName, StackStatus.CREATE_COMPLETE);
+
+        await DisplayStackOutputsAsync(stackName);
     }
 
 
@@ -79,6 +92,17 @@ Outputs:
             }
 
             await Task.Delay(TimeSpan.FromSeconds(5)); // Poll every 5 seconds
+        }
+    }
+
+    private async Task DisplayStackOutputsAsync(string stackName)
+    {
+        var response = await _cfClient.DescribeStacksAsync(new DescribeStacksRequest { StackName = stackName });
+        var outputs = response.Stacks[0].Outputs;
+
+        foreach (var output in outputs)
+        {
+            Console.WriteLine($"Output Key: {output.OutputKey}, Value: {output.OutputValue}");
         }
     }
 }
