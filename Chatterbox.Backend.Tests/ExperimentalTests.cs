@@ -1,6 +1,10 @@
 ﻿using Amazon.CloudFormation;
 using Amazon.CloudFormation.Model;
 using NUnit.Framework;
+using System.Diagnostics;
+using System.IO.Compression;
+using System.Security.Cryptography.X509Certificates;
+using InvalidOperationException = System.InvalidOperationException;
 
 namespace Chatterbox.Backend.Tests;
 
@@ -43,15 +47,33 @@ Outputs:
     [Test]
     public async Task Foo()
     {
+        var stageName = "prod";
+        var bucketName = $"chatterbox-bucket-{Guid.NewGuid():N}"; // Unique name per test run
+        var bucketKey = $"chatterbox-{stageName}/{Guid.NewGuid():N}/lambda.zip";
+
+        var packagePath = await LambdaDeploymentHelper.CreateLambdaPackage();
+
+        // TODO: We will need to get the AWS endpoint URL from TestContainers
+        await LambdaDeploymentHelper.UploadArtifactAsync(bucketName, bucketKey, packagePath,"http://localhost:4566");
+
+
+        var templateBody = LoadTemplateYaml();
+
         var stackName = $"test-stack-{Guid.NewGuid():N}"; // Unique name per test run
 
         var createRequest = new CreateStackRequest
         {
             StackName = stackName,
-            TemplateBody = TemplateBody,
+            TemplateBody = templateBody,
             Parameters =
             [
-                new Parameter { ParameterKey = "BucketName", ParameterValue = $"some-test-bucket-{Guid.NewGuid():N}" }
+//                new Parameter { ParameterKey = "Environment", ParameterValue = stageName },
+                new Parameter { ParameterKey = "LambdaCodeBucket", ParameterValue = bucketName },
+                new Parameter { ParameterKey = "LambdaCodeKey", ParameterValue = bucketKey },
+                new Parameter { ParameterKey = "StageName", ParameterValue = stageName },
+                //new Parameter { ParameterKey = "TableName", ParameterValue = "chatterbox-connections" },
+                new Parameter { ParameterKey = "AwsServiceUrl", ParameterValue = "http://floci:4566" },
+//                new Parameter { ParameterKey = "BucketName", ParameterValue = $"some-test-bucket-{Guid.NewGuid():N}" }
             ],
             OnFailure = OnFailure.ROLLBACK, // Auto-cleanup if creation fails
         };
@@ -64,6 +86,12 @@ Outputs:
 
         await DisplayStackOutputsAsync(stackName);
     }
+
+
+
+
+
+
 
 
     // Helper method to poll the CloudFormation API in-process
@@ -104,5 +132,24 @@ Outputs:
         {
             Console.WriteLine($"Output Key: {output.OutputKey}, Value: {output.OutputValue}");
         }
+    }
+
+
+    private static string LoadTemplateYaml()
+    {
+        var directory = new DirectoryInfo(AppContext.BaseDirectory);
+
+        while (directory is not null)
+        {
+            var candidate = Path.Combine(directory.FullName, "template.yaml");
+            if (File.Exists(candidate))
+            {
+                return File.ReadAllText(candidate);
+            }
+
+            directory = directory.Parent;
+        }
+
+        throw new FileNotFoundException("Could not find template.yaml in the repository tree.");
     }
 }
