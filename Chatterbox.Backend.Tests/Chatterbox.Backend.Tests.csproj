@@ -6,14 +6,15 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="Amazon.Lambda.Core" Version="3.1.1" />
-    <PackageReference Include="Amazon.Lambda.TestUtilities" Version="4.1.0" />
+    <PackageReference Include="Amazon.Lambda.Core" Version="3.3.0" />
+    <PackageReference Include="Amazon.Lambda.TestUtilities" Version="4.2.0" />
     <PackageReference Include="AWSSDK.CloudFormation" Version="4.0.102.1" />
-    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.8.1" />
     <PackageReference Include="NUnit" Version="4.6.1" />
     <PackageReference Include="NUnit3TestAdapter" Version="6.2.0" />
-    <PackageReference Include="AwesomeAssertions" Version="9.4.0" />
-    <PackageReference Include="Testcontainers" Version="4.13.0" />
+    <PackageReference Include="AwesomeAssertions" Version="9.5.0" />
+    <PackageReference Include="SSH.NET" Version="2026.0.0" />
+    <PackageReference Include="Testcontainers.Floci" Version="4.13.0" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Chatterbox.Backend\Chatterbox.Backend.csproj" />

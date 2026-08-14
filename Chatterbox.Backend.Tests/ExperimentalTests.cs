@@ -1,48 +1,60 @@
 ﻿using Amazon.CloudFormation;
 using Amazon.CloudFormation.Model;
+using DotNet.Testcontainers.Builders;
+using DotNet.Testcontainers.Configurations;
+using DotNet.Testcontainers.Containers;
 using NUnit.Framework;
-using System.Diagnostics;
-using System.IO.Compression;
-using System.Security.Cryptography.X509Certificates;
-using InvalidOperationException = System.InvalidOperationException;
+using Testcontainers.Floci;
 
 namespace Chatterbox.Backend.Tests;
 
 [TestFixture]
 public class ExperimentalTests
 {
-    private const string TemplateBody = @"
-AWSTemplateFormatVersion: '2010-09-09'
-Parameters:
-  BucketName:
-    Type: String
-    Description: 'The name of the bucket to create'
-    MinLength: 3
+    private IContainer _flociContainer = null!;
 
-Resources:
-  MySimpleBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Ref BucketName
+    private AmazonCloudFormationClient _cfClient = null!;
 
-Outputs:
-  CreatedBucketName:
-    Description: ""The name of your new S3 bucket""
-    Value: !Ref MySimpleBucket
-        ";
-
-    private readonly AmazonCloudFormationClient _cfClient;
-
-    public ExperimentalTests()
+    [SetUp]
+    public async Task SetUp()
     {
+        _flociContainer = new FlociBuilder("floci/floci:1.6.0")
+            .WithName($"floci-{Guid.NewGuid():N}")
+            .WithBindMount("/var/run/docker.sock", "/var/run/docker.sock", AccessMode.ReadWrite)
+            .WithPortBinding(4566, true)
+            .WithEnvironment("FLOCI_DEFAULT_REGION", "us-east-1")
+            .WithEnvironment("AWS_DEFAULT_REGION", "us-east-1")
+            .WithEnvironment("AWS_REGION", "us-east-1")
+            .WithWaitStrategy(
+                Wait.ForUnixContainer()
+                    .UntilHttpRequestIsSucceeded(request =>
+                        request.ForPort(4566)
+                            .ForPath("/_floci/health")))
+            .Build();
+
+        await _flociContainer.StartAsync();
+
+        Console.WriteLine($"Floci at: {_flociContainer.GetConnectionString()}");
+
         var config = new AmazonCloudFormationConfig
         {
             RegionEndpoint = Amazon.RegionEndpoint.USEast1,
-            ServiceURL = "http://localhost:4566"
+            ServiceURL = _flociContainer.GetConnectionString()
         };
 
         _cfClient = new AmazonCloudFormationClient(config);
     }
+
+    [TearDown]
+    public async Task TearDown()
+    {
+        if (_flociContainer is not null)
+        {
+            await _flociContainer.StopAsync();
+            await _flociContainer.DisposeAsync();
+        }
+    }
+
 
     [Test]
     public async Task Foo()
@@ -54,8 +66,8 @@ Outputs:
         var packagePath = await LambdaDeploymentHelper.CreateLambdaPackage();
 
         // TODO: We will need to get the AWS endpoint URL from TestContainers
-        await LambdaDeploymentHelper.UploadArtifactAsync(bucketName, bucketKey, packagePath,"http://localhost:4566");
-
+        Console.WriteLine("Uploading artifact...");
+        await LambdaDeploymentHelper.UploadArtifactAsync(bucketName, bucketKey, packagePath, _flociContainer.GetConnectionString());
 
         var templateBody = LoadTemplateYaml();
 
@@ -67,13 +79,10 @@ Outputs:
             TemplateBody = templateBody,
             Parameters =
             [
-//                new Parameter { ParameterKey = "Environment", ParameterValue = stageName },
                 new Parameter { ParameterKey = "LambdaCodeBucket", ParameterValue = bucketName },
                 new Parameter { ParameterKey = "LambdaCodeKey", ParameterValue = bucketKey },
                 new Parameter { ParameterKey = "StageName", ParameterValue = stageName },
-                //new Parameter { ParameterKey = "TableName", ParameterValue = "chatterbox-connections" },
-                new Parameter { ParameterKey = "AwsServiceUrl", ParameterValue = "http://floci:4566" },
-//                new Parameter { ParameterKey = "BucketName", ParameterValue = $"some-test-bucket-{Guid.NewGuid():N}" }
+                new Parameter { ParameterKey = "AwsServiceUrl", ParameterValue = _flociContainer.GetConnectionString() },
             ],
             OnFailure = OnFailure.ROLLBACK, // Auto-cleanup if creation fails
         };
