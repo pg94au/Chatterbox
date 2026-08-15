@@ -8,12 +8,10 @@ using System.Text;
 using System.Text.Json;
 using Testcontainers.Floci;
 
-
-
 namespace Chatterbox.Backend.Tests;
 
 [TestFixture]
-public class ExperimentalTests
+public class BackendTests
 {
     private FlociContainer _flociContainer = null!;
 
