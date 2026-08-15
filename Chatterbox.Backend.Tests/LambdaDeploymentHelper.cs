@@ -75,6 +75,11 @@ public class LambdaDeploymentHelper
         startInfo.Environment["AWS_ACCESS_KEY_ID"] = "test";
         startInfo.Environment["AWS_SECRET_ACCESS_KEY"] = "test";
         startInfo.Environment["AWS_SESSION_TOKEN"] = "test";
+        startInfo.Environment["AWS_DEFAULT_REGION"] = "us-east-1";
+        startInfo.Environment["AWS_REGION"] = "us-east-1";
+        startInfo.Environment["DEFAULT_REGION"] = "us-east-1";
+        startInfo.Environment["FLOCI_DEFAULT_REGION"] = "us-east-1";
+        startInfo.Environment["FLOCI_REGION"] = "us-east-1";
         startInfo.Environment["AWS_EC2_METADATA_DISABLED"] = "true";
 
         using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Failed to start '{fileName}'.");
@@ -94,7 +99,8 @@ public class LambdaDeploymentHelper
 
     public static async Task UploadArtifactAsync(string bucketName, string s3Key, string packagePath, string awsEndpoint)
     {
-        await RunAwsAsync($"s3api create-bucket --bucket {bucketName} --create-bucket-configuration LocationConstraint=ca-central-1", awsEndpoint);
+        //await RunAwsAsync($"s3api create-bucket --bucket {bucketName} --create-bucket-configuration LocationConstraint=ca-central-1", awsEndpoint);
+        await RunAwsAsync($"s3api create-bucket --bucket {bucketName}", awsEndpoint);
 
         await RunAwsAsync($"s3 cp \"{packagePath}\" s3://{bucketName}/{s3Key} --checksum-algorithm SHA256", awsEndpoint);
     }
@@ -103,7 +109,7 @@ public class LambdaDeploymentHelper
     {
         return await RunProcessAsync(
             "aws",
-            $"{arguments} --endpoint-url \"{awsEndpoint}\"",
+            $"{arguments} --region us-east-1 --endpoint-url \"{awsEndpoint}\"",
             FindRepositoryRoot());
     }
 

@@ -1,11 +1,10 @@
 ﻿using Amazon.CloudFormation;
-using Amazon.CloudFormation.Model;
 using AwesomeAssertions;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Configurations;
-using DotNet.Testcontainers.Containers;
 using NUnit.Framework;
 using System.Net.WebSockets;
+using Amazon.Runtime;
 using Testcontainers.Floci;
 
 namespace Chatterbox.Backend.Tests;
@@ -35,6 +34,7 @@ public class ExperimentalTests
     {
         var config = new AmazonCloudFormationConfig
         {
+            AuthenticationRegion = "us-east-1",
             RegionEndpoint = Amazon.RegionEndpoint.USEast1,
             ServiceURL = _flociContainer.GetConnectionString()
         };
@@ -44,13 +44,24 @@ public class ExperimentalTests
 
     private async Task StartFlociContainer()
     {
-        _flociContainer = new FlociBuilder("floci/floci:1.6.0")
+        var network = new NetworkBuilder()
+            .WithName($"floci_network-{Guid.NewGuid():N}")
+            .Build();
+
+        _flociContainer = new FlociBuilder("floci/floci:latest")
             .WithName($"floci-{Guid.NewGuid():N}")
+            .WithNetwork(network)
+            .WithNetworkAliases("floci")
             .WithBindMount("/var/run/docker.sock", "/var/run/docker.sock", AccessMode.ReadWrite)
             .WithPortBinding(4566, true)
             .WithEnvironment("FLOCI_DEFAULT_REGION", "us-east-1")
+            .WithEnvironment("FLOCI_REGION", "us-east-1")
+            .WithEnvironment("DEFAULT_REGION", "us-east-1")
+            .WithEnvironment("FLOCI_WS_ALLOW_ORIGIN", "*")
             .WithEnvironment("AWS_DEFAULT_REGION", "us-east-1")
             .WithEnvironment("AWS_REGION", "us-east-1")
+            .WithEnvironment("LAMBDA_EXECUTOR", "docker")
+            .WithEnvironment("LOG_LEVEL", "DEBUG")
             .WithWaitStrategy(
                 Wait.ForUnixContainer()
                     .UntilHttpRequestIsSucceeded(request =>

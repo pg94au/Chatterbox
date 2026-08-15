@@ -38,9 +38,11 @@ public class BackendTests
             .WithName($"floci-{Guid.NewGuid()}")
             .WithBindMount("/var/run/docker.sock", "/var/run/docker.sock", AccessMode.ReadWrite)
             .WithPortBinding(4566, true)
-            .WithEnvironment("FLOCI_DEFAULT_REGION", "ca-central-1")
-            .WithEnvironment("AWS_DEFAULT_REGION", "ca-central-1")
-            .WithEnvironment("AWS_REGION", "ca-central-1")
+            .WithEnvironment("FLOCI_DEFAULT_REGION", "us-east-1")
+            .WithEnvironment("FLOCI_REGION", "us-east-1")
+            .WithEnvironment("DEFAULT_REGION", "us-east-1")
+            .WithEnvironment("AWS_DEFAULT_REGION", "us-east-1")
+            .WithEnvironment("AWS_REGION", "us-east-1")
             .WithWaitStrategy(
                 Wait.ForUnixContainer()
                     .UntilHttpRequestIsSucceeded(request =>
@@ -174,7 +176,7 @@ public class BackendTests
 
     private async Task EnsureBucketExistsAsync(string bucketName)
     {
-        await RunAwsAsync($"s3api create-bucket --bucket {bucketName} --create-bucket-configuration LocationConstraint=ca-central-1");
+        await RunAwsAsync($"s3api create-bucket --bucket {bucketName}");
     }
 
     private async Task UploadArtifactAsync(string bucketName, string s3Key, string packagePath)
@@ -213,7 +215,7 @@ public class BackendTests
     {
         return await RunProcessAsync(
             "aws",
-            $"{arguments} --region ca-central-1 --endpoint-url \"{_awsEndpoint}\"",
+            $"{arguments} --region us-east-1 --endpoint-url \"{_awsEndpoint}\"",
             FindRepositoryRoot());
     }
 
@@ -233,6 +235,8 @@ public class BackendTests
         startInfo.Environment["AWS_ACCESS_KEY_ID"] = "test";
         startInfo.Environment["AWS_SECRET_ACCESS_KEY"] = "test";
         startInfo.Environment["AWS_SESSION_TOKEN"] = "test";
+        startInfo.Environment["AWS_DEFAULT_REGION"] = "us-east-1";
+        startInfo.Environment["AWS_REGION"] = "us-east-1";
         startInfo.Environment["AWS_EC2_METADATA_DISABLED"] = "true";
 
         using var process = Process.Start(startInfo) ?? throw new InvalidOperationException($"Failed to start '{fileName}'.");
