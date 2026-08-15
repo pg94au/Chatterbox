@@ -5,6 +5,7 @@ using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Configurations;
 using DotNet.Testcontainers.Containers;
 using NUnit.Framework;
+using System.Net.WebSockets;
 using Testcontainers.Floci;
 
 namespace Chatterbox.Backend.Tests;
@@ -78,11 +79,22 @@ public class ExperimentalTests
         var stacks = response.Stacks;
         stacks.Should().NotBeEmpty();
 
-        var webSocketEndpoint = stacks[0].Outputs.FirstOrDefault(o => o.OutputKey == "WebSocketEndpoint")?.OutputValue;
+        var webSocketApiId = stacks[0].Outputs.FirstOrDefault(o => o.OutputKey == "WebSocketApiId")?.OutputValue;
+        webSocketApiId.Should().NotBeNullOrEmpty();
 
-        webSocketEndpoint.Should().NotBeNullOrEmpty();
+        var stageName = stacks[0].Outputs.FirstOrDefault(o => o.OutputKey == "StageName")?.OutputValue;
+        stageName.Should().NotBeNullOrEmpty();
 
-        // TODO: Connect to the websocket and assert that we are connected.
+        var serviceUrl = new Uri(_flociContainer.GetConnectionString());
+        var webSocketEndpoint = $"ws://{serviceUrl.Host}:{serviceUrl.Port}/ws/{webSocketApiId}/{stageName}";
+        Console.WriteLine($"Connecting to WebSocket endpoint: {webSocketEndpoint}");
+
+        using var client = new ClientWebSocket();
+        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+
+        await client.ConnectAsync(new Uri(webSocketEndpoint!), cancellation.Token);
+
+        client.State.Should().Be(WebSocketState.Open);
     }
 
     private static string LoadTemplateYaml()
