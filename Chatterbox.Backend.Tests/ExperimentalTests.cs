@@ -74,13 +74,16 @@ public class ExperimentalTests
     [Test]
     public async Task Foo()
     {
-        await Task.CompletedTask;
+        var response = await _cfClient.DescribeStacksAsync();
+        var stacks = response.Stacks;
+        stacks.Should().NotBeEmpty();
 
-        true.Should().BeTrue();
+        var webSocketEndpoint = stacks[0].Outputs.FirstOrDefault(o => o.OutputKey == "WebSocketEndpoint")?.OutputValue;
+
+        webSocketEndpoint.Should().NotBeNullOrEmpty();
+
+        // TODO: Connect to the websocket and assert that we are connected.
     }
-
-
-
 
     private static string LoadTemplateYaml()
     {
