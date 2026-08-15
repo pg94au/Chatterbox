@@ -1,7 +1,9 @@
-﻿using NUnit.Framework;
+﻿using Amazon.CloudFormation;
+using Amazon.CloudFormation.Model;
+using NUnit.Framework;
 using System.Diagnostics;
 using System.IO.Compression;
-using Amazon.CloudFormation.Model;
+using Testcontainers.Floci;
 using InvalidOperationException = System.InvalidOperationException;
 
 namespace Chatterbox.Backend.Tests;
@@ -103,6 +105,82 @@ public class LambdaDeploymentHelper
             "aws",
             $"{arguments} --endpoint-url \"{awsEndpoint}\"",
             FindRepositoryRoot());
+    }
+
+    public static async Task DeployCloudFormation(FlociContainer flociContainer, AmazonCloudFormationClient cfClient, string templateBody)
+    {
+        var stageName = "prod";
+        var bucketName = $"chatterbox-bucket-{Guid.NewGuid():N}"; // Unique name per test run
+        var bucketKey = $"chatterbox-{stageName}/{Guid.NewGuid():N}/lambda.zip";
+
+        var packagePath = await LambdaDeploymentHelper.CreateLambdaPackage();
+
+        Console.WriteLine("Uploading artifact...");
+        await LambdaDeploymentHelper.UploadArtifactAsync(bucketName, bucketKey, packagePath, flociContainer.GetConnectionString());
+
+        var stackName = $"test-stack-{Guid.NewGuid():N}"; // Unique name per test run
+
+        var createRequest = new CreateStackRequest
+        {
+            StackName = stackName,
+            TemplateBody = templateBody,
+            Parameters =
+            [
+                new Parameter { ParameterKey = "LambdaCodeBucket", ParameterValue = bucketName },
+                new Parameter { ParameterKey = "LambdaCodeKey", ParameterValue = bucketKey },
+                new Parameter { ParameterKey = "StageName", ParameterValue = stageName },
+                new Parameter { ParameterKey = "AwsServiceUrl", ParameterValue = flociContainer.GetConnectionString() },
+            ],
+            OnFailure = OnFailure.ROLLBACK, // Auto-cleanup if creation fails
+        };
+
+        // Trigger the creation in AWS
+        await cfClient.CreateStackAsync(createRequest);
+
+        // Wait in-process until CloudFormation finishes deploying the infrastructure
+        await WaitForStackStatusAsync(stackName, StackStatus.CREATE_COMPLETE, cfClient);
+
+        await DisplayStackOutputsAsync(stackName, cfClient);
+    }
+
+    // Helper method to poll the CloudFormation API in-process
+    private static async Task WaitForStackStatusAsync(string stackName, StackStatus targetStatus, AmazonCloudFormationClient cfClient)
+    {
+        while (true)
+        {
+            try
+            {
+                var response = await cfClient.DescribeStacksAsync(new DescribeStacksRequest { StackName = stackName });
+                var currentStatus = response.Stacks[0].StackStatus;
+
+                if (currentStatus == targetStatus) break;
+
+                // If it transitions into a failure state, throw immediately to fail the test fast
+                if (currentStatus.Value.EndsWith("_FAILED") || currentStatus == StackStatus.ROLLBACK_COMPLETE)
+                {
+                    throw new Exception($"Stack entered an unexpected state: {currentStatus}");
+                }
+            }
+            catch (AmazonCloudFormationException ex) when (ex.ErrorCode == "ValidationError" &&
+                                                           targetStatus == StackStatus.DELETE_COMPLETE)
+            {
+                // The stack is successfully deleted and no longer exists in AWS
+                break;
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(5)); // Poll every 5 seconds
+        }
+    }
+
+    private static async Task DisplayStackOutputsAsync(string stackName, AmazonCloudFormationClient cfClient)
+    {
+        var response = await cfClient.DescribeStacksAsync(new DescribeStacksRequest { StackName = stackName });
+        var outputs = response.Stacks[0].Outputs;
+
+        foreach (var output in outputs)
+        {
+            Console.WriteLine($"Output Key: {output.OutputKey}, Value: {output.OutputValue}");
+        }
     }
 
 }
