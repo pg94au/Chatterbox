@@ -126,6 +126,13 @@ public class LambdaDeploymentHelper
 
         var stackName = $"test-stack-{Guid.NewGuid():N}"; // Unique name per test run
 
+        var flociInsideUrl = new UriBuilder(flociContainer.GetConnectionString())
+        {
+            Host = flociContainer.Name.Trim('/'), // Has '/' prefix?
+            Port = 4566
+        };
+        Console.WriteLine($"Floci inside URL: {flociInsideUrl}");
+
         var createRequest = new CreateStackRequest
         {
             StackName = stackName,
@@ -135,7 +142,7 @@ public class LambdaDeploymentHelper
                 new Parameter { ParameterKey = "LambdaCodeBucket", ParameterValue = bucketName },
                 new Parameter { ParameterKey = "LambdaCodeKey", ParameterValue = bucketKey },
                 new Parameter { ParameterKey = "StageName", ParameterValue = stageName },
-                new Parameter { ParameterKey = "AwsServiceUrl", ParameterValue = flociContainer.GetConnectionString() },
+                new Parameter { ParameterKey = "AwsServiceUrl", ParameterValue = flociInsideUrl.ToString() },
             ],
             OnFailure = OnFailure.ROLLBACK, // Auto-cleanup if creation fails
         };

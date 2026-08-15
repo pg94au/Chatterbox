@@ -4,8 +4,11 @@ using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Configurations;
 using NUnit.Framework;
 using System.Net.WebSockets;
-using Amazon.Runtime;
+using System.Text;
+using System.Text.Json;
 using Testcontainers.Floci;
+
+
 
 namespace Chatterbox.Backend.Tests;
 
@@ -106,6 +109,26 @@ public class ExperimentalTests
         await client.ConnectAsync(new Uri(webSocketEndpoint!), cancellation.Token);
 
         client.State.Should().Be(WebSocketState.Open);
+
+        using var responseCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var registerMessage = "{\"action\":\"register\",\"displayName\":\"Paul\"}"u8.ToArray();
+
+        await client.SendAsync(
+            new ArraySegment<byte>(registerMessage),
+            WebSocketMessageType.Text,
+            endOfMessage: true,
+            responseCancellation.Token);
+
+        var receiveBuffer = new byte[4096];
+        var received = await client.ReceiveAsync(new ArraySegment<byte>(receiveBuffer), responseCancellation.Token);
+
+        received.MessageType.Should().Be(WebSocketMessageType.Text);
+
+        using var responseDocument = JsonDocument.Parse(Encoding.UTF8.GetString(receiveBuffer, 0, received.Count));
+        var responseRoot = responseDocument.RootElement;
+
+        responseRoot.GetProperty("type").GetString().Should().Be("userJoined");
+        responseRoot.GetProperty("displayName").GetString().Should().Be("Paul");
     }
 
     private static string LoadTemplateYaml()
