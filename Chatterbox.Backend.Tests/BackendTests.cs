@@ -6,6 +6,7 @@ using NUnit.Framework;
 using System.Net.WebSockets;
 using System.Text;
 using System.Text.Json;
+using DotNet.Testcontainers.Containers;
 using Testcontainers.Floci;
 
 namespace Chatterbox.Backend.Tests;
@@ -49,20 +50,19 @@ public class BackendTests
             .WithName($"floci_network-{Guid.NewGuid():N}")
             .Build();
 
+        var sessionId = ResourceReaper.DefaultSessionId;
+
         _flociContainer = new FlociBuilder("floci/floci:latest")
             .WithName($"floci-{Guid.NewGuid():N}")
             .WithNetwork(network)
             .WithNetworkAliases("floci")
             .WithBindMount("/var/run/docker.sock", "/var/run/docker.sock", AccessMode.ReadWrite)
             .WithPortBinding(4566, true)
-            .WithEnvironment("FLOCI_DEFAULT_REGION", "us-east-1")
-            .WithEnvironment("FLOCI_REGION", "us-east-1")
-            .WithEnvironment("DEFAULT_REGION", "us-east-1")
-            .WithEnvironment("FLOCI_WS_ALLOW_ORIGIN", "*")
-            .WithEnvironment("AWS_DEFAULT_REGION", "us-east-1")
-            .WithEnvironment("AWS_REGION", "us-east-1")
-            .WithEnvironment("LAMBDA_EXECUTOR", "docker")
             .WithEnvironment("LOG_LEVEL", "DEBUG")
+            //.WithEnvironment("FLOCI_SERVICES_LAMBDA_EPHEMERAL", "true")
+            //.WithEnvironment("DOCKER_LABELS", "org.testcontainers=true")
+            //.WithEnvironment("FLOCI_SERVICES_LAMBDA_CONTAINER_IDLE_TIMEOUT_SECONDS", "1")
+            //.WithEnvironment("LAMBDA_DOCKER_FLAGS", $"-l org.testcontainers.session-id={sessionId}")
             .WithWaitStrategy(
                 Wait.ForUnixContainer()
                     .UntilHttpRequestIsSucceeded(request =>
@@ -78,7 +78,9 @@ public class BackendTests
     {
         if (_flociContainer is not null)
         {
-            await _flociContainer.StopAsync();
+            await Task.Delay(TimeSpan.FromSeconds(3));
+
+            //await _flociContainer.StopAsync();
             await _flociContainer.DisposeAsync();
         }
     }
