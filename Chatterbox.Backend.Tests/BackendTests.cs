@@ -59,10 +59,6 @@ public class BackendTests
             .WithBindMount("/var/run/docker.sock", "/var/run/docker.sock", AccessMode.ReadWrite)
             .WithPortBinding(4566, true)
             .WithEnvironment("LOG_LEVEL", "DEBUG")
-            //.WithEnvironment("FLOCI_SERVICES_LAMBDA_EPHEMERAL", "true")
-            //.WithEnvironment("DOCKER_LABELS", "org.testcontainers=true")
-            //.WithEnvironment("FLOCI_SERVICES_LAMBDA_CONTAINER_IDLE_TIMEOUT_SECONDS", "1")
-            //.WithEnvironment("LAMBDA_DOCKER_FLAGS", $"-l org.testcontainers.session-id={sessionId}")
             .WithWaitStrategy(
                 Wait.ForUnixContainer()
                     .UntilHttpRequestIsSucceeded(request =>
