@@ -18,6 +18,10 @@ public class BackendTests
 
     private AmazonCloudFormationClient _cfClient = null!;
 
+    private string _stackName = string.Empty;
+
+    private string _flociNetworkName = string.Empty;
+
     [SetUp]
     public async Task SetUp()
     {
@@ -29,7 +33,7 @@ public class BackendTests
 
         var templateBody = LoadTemplateYaml();
 
-        await LambdaDeploymentHelper.DeployCloudFormation(_flociContainer, _cfClient, templateBody);
+        _stackName = await LambdaDeploymentHelper.DeployCloudFormation(_flociContainer, _cfClient, templateBody);
     }
 
     private AmazonCloudFormationClient CreateCloudFormationClient()
@@ -46,13 +50,16 @@ public class BackendTests
 
     private async Task StartFlociContainer()
     {
+        _flociNetworkName = $"floci_network-{Guid.NewGuid():N}";
+
         var network = new NetworkBuilder()
-            .WithName($"floci_network-{Guid.NewGuid():N}")
+            .WithName(_flociNetworkName)
             .Build();
 
         var sessionId = ResourceReaper.DefaultSessionId;
 
         _flociContainer = new FlociBuilder("floci/floci:latest")
+            .WithCleanUp(true)
             .WithName($"floci-{Guid.NewGuid():N}")
             .WithNetwork(network)
             .WithNetworkAliases("floci")
@@ -72,11 +79,19 @@ public class BackendTests
     [TearDown]
     public async Task TearDown()
     {
+        if (!string.IsNullOrWhiteSpace(_stackName))
+        {
+            Console.WriteLine($"Deleting CloudFormation stack: {_stackName}");
+            await LambdaDeploymentHelper.DeleteCloudFormation(_cfClient, _stackName);
+        }
+
+        await LambdaDeploymentHelper.CleanupDockerNetworkAsync(_flociNetworkName);
+
         if (_flociContainer is not null)
         {
             await Task.Delay(TimeSpan.FromSeconds(3));
 
-            //await _flociContainer.StopAsync();
+            await _flociContainer.StopAsync();
             await _flociContainer.DisposeAsync();
         }
     }

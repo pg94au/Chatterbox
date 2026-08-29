@@ -113,7 +113,7 @@ public class LambdaDeploymentHelper
             FindRepositoryRoot());
     }
 
-    public static async Task DeployCloudFormation(FlociContainer flociContainer, AmazonCloudFormationClient cfClient, string templateBody)
+    public static async Task<string> DeployCloudFormation(FlociContainer flociContainer, AmazonCloudFormationClient cfClient, string templateBody)
     {
         var stageName = "prod";
         var bucketName = $"chatterbox-bucket-{Guid.NewGuid():N}"; // Unique name per test run
@@ -154,6 +154,56 @@ public class LambdaDeploymentHelper
         await WaitForStackStatusAsync(stackName, StackStatus.CREATE_COMPLETE, cfClient);
 
         await DisplayStackOutputsAsync(stackName, cfClient);
+
+        return stackName;
+    }
+
+    public static async Task DeleteCloudFormation(AmazonCloudFormationClient cfClient, string stackName)
+    {
+        try
+        {
+            await cfClient.DeleteStackAsync(new DeleteStackRequest { StackName = stackName });
+            await WaitForStackStatusAsync(stackName, StackStatus.DELETE_COMPLETE, cfClient);
+        }
+        catch (AmazonCloudFormationException ex) when (ex.ErrorCode == "ValidationError" &&
+                                                     ex.Message.Contains("does not exist", StringComparison.OrdinalIgnoreCase))
+        {
+            // The stack was already cleaned up or never created.
+        }
+    }
+
+    public static async Task CleanupDockerNetworkAsync(string? networkName)
+    {
+        if (string.IsNullOrWhiteSpace(networkName))
+        {
+            return;
+        }
+
+        try
+        {
+            var containerIds = await RunProcessAsync("docker", $"ps -aq --filter network={networkName}", FindRepositoryRoot());
+
+            foreach (var containerId in containerIds.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (!string.IsNullOrWhiteSpace(containerId))
+                {
+                    await RunProcessAsync("docker", $"rm -f {containerId}", FindRepositoryRoot());
+                }
+            }
+        }
+        catch
+        {
+            // The network or containers may already be gone.
+        }
+
+        try
+        {
+            await RunProcessAsync("docker", $"network rm {networkName}", FindRepositoryRoot());
+        }
+        catch
+        {
+            // Ignore if the network already disappeared.
+        }
     }
 
     // Helper method to poll the CloudFormation API in-process
