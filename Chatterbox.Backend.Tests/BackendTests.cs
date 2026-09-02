@@ -1,5 +1,6 @@
 ﻿using Amazon.CloudFormation;
 using AwesomeAssertions;
+using Chatterbox.Backend;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Configurations;
 using NUnit.Framework;
@@ -98,7 +99,7 @@ public class BackendTests
 
 
     [Test]
-    public async Task Foo()
+    public async Task FirstUserCanRegisterToEmptyChatroom()
     {
         var response = await _cfClient.DescribeStacksAsync();
         var stacks = response.Stacks;
@@ -135,11 +136,38 @@ public class BackendTests
 
         received.MessageType.Should().Be(WebSocketMessageType.Text);
 
-        using var responseDocument = JsonDocument.Parse(Encoding.UTF8.GetString(receiveBuffer, 0, received.Count));
-        var responseRoot = responseDocument.RootElement;
+        var responseJson = Encoding.UTF8.GetString(receiveBuffer, 0, received.Count);
+        var userJoinedEvent = JsonSerializer.Deserialize<UserJoinedEvent>(responseJson);
 
-        responseRoot.GetProperty("type").GetString().Should().Be("userJoined");
-        responseRoot.GetProperty("displayName").GetString().Should().Be("Paul");
+        userJoinedEvent.Should().NotBeNull();
+        userJoinedEvent!.Type.Should().Be("userJoined");
+        userJoinedEvent.DisplayName.Should().Be("Paul");
+
+        var listUsersMessage = "{\"action\":\"listUsers\"}"u8.ToArray();
+
+        var receiveBuffer2 = new byte[4096];
+        var received2 = await client.ReceiveAsync(new ArraySegment<byte>(receiveBuffer2), responseCancellation.Token);
+
+        received2.MessageType.Should().Be(WebSocketMessageType.Text);
+
+        var responseJson2 = Encoding.UTF8.GetString(receiveBuffer2, 0, received2.Count);
+//        using var listUsersDocument = JsonDocument.Parse(Encoding.UTF8.GetString(receiveBuffer, 0, received.Count));
+        var registeredEvent = JsonSerializer.Deserialize<RegisteredEvent>(responseJson2);
+
+        registeredEvent.Should().NotBeNull();
+        registeredEvent.Type.Should().Be("registered");
+        registeredEvent.DisplayName.Should().Be("Paul");
+
+        //await client.SendAsync(
+        //    new ArraySegment<byte>(listUsersMessage),
+        //    WebSocketMessageType.Text,
+        //    endOfMessage: true,
+        //    responseCancellation.Token);
+
+        //usersEvent.Should().NotBeNull();
+        //usersEvent.Type.Should().Be("users");
+        //usersEvent.Users.Should().HaveCount(1);
+        //usersEvent.Users.First().Should().Be("Paul");
     }
 
     private static string LoadTemplateYaml()
