@@ -123,40 +123,24 @@ public class BackendTests
         client.State.Should().Be(WebSocketState.Open);
 
         using var responseCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var registerMessage = "{\"action\":\"register\",\"displayName\":\"Paul\"}"u8.ToArray();
 
-        await client.SendAsync(
-            new ArraySegment<byte>(registerMessage),
-            WebSocketMessageType.Text,
-            endOfMessage: true,
-            responseCancellation.Token);
+        var registerRequest = new RegisterRequest("Paul");
 
-        var receiveBuffer = new byte[4096];
-        var received = await client.ReceiveAsync(new ArraySegment<byte>(receiveBuffer), responseCancellation.Token);
+        await client.SendMessageAsync(registerRequest, responseCancellation.Token);
 
-        received.MessageType.Should().Be(WebSocketMessageType.Text);
-
-        var responseJson = Encoding.UTF8.GetString(receiveBuffer, 0, received.Count);
-        var userJoinedEvent = JsonSerializer.Deserialize<UserJoinedEvent>(responseJson);
+        var userJoinedEvent = await client.ReceiveMessage<UserJoinedEvent>(responseCancellation.Token);
 
         userJoinedEvent.Should().NotBeNull();
         userJoinedEvent!.Type.Should().Be("userJoined");
         userJoinedEvent.DisplayName.Should().Be("Paul");
 
-        var listUsersMessage = "{\"action\":\"listUsers\"}"u8.ToArray();
-
-        var receiveBuffer2 = new byte[4096];
-        var received2 = await client.ReceiveAsync(new ArraySegment<byte>(receiveBuffer2), responseCancellation.Token);
-
-        received2.MessageType.Should().Be(WebSocketMessageType.Text);
-
-        var responseJson2 = Encoding.UTF8.GetString(receiveBuffer2, 0, received2.Count);
-//        using var listUsersDocument = JsonDocument.Parse(Encoding.UTF8.GetString(receiveBuffer, 0, received.Count));
-        var registeredEvent = JsonSerializer.Deserialize<RegisteredEvent>(responseJson2);
+        var registeredEvent = await client.ReceiveMessage<RegisteredEvent>(responseCancellation.Token);
 
         registeredEvent.Should().NotBeNull();
         registeredEvent.Type.Should().Be("registered");
         registeredEvent.DisplayName.Should().Be("Paul");
+
+        //var listUsersMessage = "{\"action\":\"listUsers\"}"u8.ToArray();
 
         //await client.SendAsync(
         //    new ArraySegment<byte>(listUsersMessage),
