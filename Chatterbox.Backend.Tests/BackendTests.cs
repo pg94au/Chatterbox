@@ -117,25 +117,20 @@ public class BackendTests
 
         using var client = new ClientWebSocket();
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-
         await client.ConnectAsync(new Uri(webSocketEndpoint!), cancellation.Token);
-
         client.State.Should().Be(WebSocketState.Open);
 
-        using var responseCancellation = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        using var testTimeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
         var registerRequest = new RegisterRequest("Paul");
+        await client.SendMessageAsync(registerRequest, testTimeoutCts.Token);
 
-        await client.SendMessageAsync(registerRequest, responseCancellation.Token);
-
-        var userJoinedEvent = await client.ReceiveMessage<UserJoinedEvent>(responseCancellation.Token);
-
+        var userJoinedEvent = await client.ReceiveMessage<UserJoinedEvent>(testTimeoutCts.Token);
         userJoinedEvent.Should().NotBeNull();
         userJoinedEvent!.Type.Should().Be("userJoined");
         userJoinedEvent.DisplayName.Should().Be("Paul");
 
-        var registeredEvent = await client.ReceiveMessage<RegisteredEvent>(responseCancellation.Token);
-
+        var registeredEvent = await client.ReceiveMessage<RegisteredEvent>(testTimeoutCts.Token);
         registeredEvent.Should().NotBeNull();
         registeredEvent.Type.Should().Be("registered");
         registeredEvent.DisplayName.Should().Be("Paul");
