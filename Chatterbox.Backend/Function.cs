@@ -167,11 +167,12 @@ public class Functions
         await SendToConnection(
             apiClient,
             request.RequestContext.ConnectionId,
-            new UsersEvent(users.Select(item => new
-            {
-                DisplayName = item.DisplayName,
-                ConnectedAt = item.ConnectedAt
-            }))
+            new UsersEvent(
+                users.Select(item => new UserPresence(
+                    item.DisplayName,
+                    item.ConnectedAt
+                ))
+            )
         );
     }
 

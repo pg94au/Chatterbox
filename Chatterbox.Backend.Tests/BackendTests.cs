@@ -115,6 +115,7 @@ public class BackendTests
         var webSocketEndpoint = $"ws://{serviceUrl.Host}:{serviceUrl.Port}/ws/{webSocketApiId}/{stageName}";
         Console.WriteLine($"Connecting to WebSocket endpoint: {webSocketEndpoint}");
 
+        // Establish websocket connection to service endpoint.
         using var client = new ClientWebSocket();
         using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         await client.ConnectAsync(new Uri(webSocketEndpoint!), cancellation.Token);
@@ -122,31 +123,33 @@ public class BackendTests
 
         using var testTimeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
+        // Register as a new user.
         var registerRequest = new RegisterRequest("Paul");
         await client.SendMessageAsync(registerRequest, testTimeoutCts.Token);
 
+        // Should receive user joined event.
         var userJoinedEvent = await client.ReceiveMessage<UserJoinedEvent>(testTimeoutCts.Token);
         userJoinedEvent.Should().NotBeNull();
         userJoinedEvent!.Type.Should().Be("userJoined");
         userJoinedEvent.DisplayName.Should().Be("Paul");
 
+        // Should receive registered event.
         var registeredEvent = await client.ReceiveMessage<RegisteredEvent>(testTimeoutCts.Token);
         registeredEvent.Should().NotBeNull();
         registeredEvent.Type.Should().Be("registered");
         registeredEvent.DisplayName.Should().Be("Paul");
 
-        //var listUsersMessage = "{\"action\":\"listUsers\"}"u8.ToArray();
+        // List users.
+        var listUsersRequest = new ListUsersRequest();
+        await client.SendMessageAsync(listUsersRequest, testTimeoutCts.Token);
 
-        //await client.SendAsync(
-        //    new ArraySegment<byte>(listUsersMessage),
-        //    WebSocketMessageType.Text,
-        //    endOfMessage: true,
-        //    responseCancellation.Token);
-
-        //usersEvent.Should().NotBeNull();
-        //usersEvent.Type.Should().Be("users");
-        //usersEvent.Users.Should().HaveCount(1);
-        //usersEvent.Users.First().Should().Be("Paul");
+        // Should receive users event with the registered user.
+        var usersEvent = await client.ReceiveMessage<UsersEvent>(testTimeoutCts.Token);
+        usersEvent.Should().NotBeNull();
+        usersEvent.Type.Should().Be("users");
+        usersEvent.Users.Should().HaveCount(1);
+        usersEvent.Users.First().DisplayName.Should().Be("Paul");
+        usersEvent.Users.First().ConnectedAt.Should().BeGreaterThan(0);
     }
 
     private static string LoadTemplateYaml()
