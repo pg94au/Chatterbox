@@ -1,13 +1,10 @@
 ﻿using Amazon.CloudFormation;
 using AwesomeAssertions;
-using Chatterbox.Backend;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Configurations;
+using DotNet.Testcontainers.Containers;
 using NUnit.Framework;
 using System.Net.WebSockets;
-using System.Text;
-using System.Text.Json;
-using DotNet.Testcontainers.Containers;
 using Testcontainers.Floci;
 
 namespace Chatterbox.Backend.Tests;
