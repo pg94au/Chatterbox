@@ -229,7 +229,7 @@ public class Functions
 
         var endpoint = awsServiceUrl == null
             ? $"https://{request.RequestContext.DomainName}/{request.RequestContext.Stage}"
-            : $"{awsServiceUrl}/execute-api/{apiId}/{stage}";
+            : $"{awsServiceUrl}_aws/execute-api/{apiId}/{stage}";
 
         var config = new AmazonApiGatewayManagementApiConfig
         {

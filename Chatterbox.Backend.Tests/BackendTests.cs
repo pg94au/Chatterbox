@@ -28,7 +28,7 @@ public class BackendTests
     {
         await StartFlociContainer();
 
-        Console.WriteLine($"Floci at: {_flociContainer.GetConnectionString()}");
+        //Console.WriteLine($"Floci at: {_flociContainer.GetConnectionString()}");
 
         _cfClient = CreateCloudFormationClient();
 
@@ -43,7 +43,7 @@ public class BackendTests
         {
             AuthenticationRegion = "us-east-1",
             RegionEndpoint = Amazon.RegionEndpoint.USEast1,
-            ServiceURL = _flociContainer.GetConnectionString()
+            ServiceURL = "http://localhost:4566" //_flociContainer.GetConnectionString()
         };
 
         return new AmazonCloudFormationClient(config);
@@ -59,22 +59,22 @@ public class BackendTests
 
         var sessionId = ResourceReaper.DefaultSessionId;
 
-        _flociContainer = new FlociBuilder("floci/floci:latest")
-            .WithCleanUp(true)
-            .WithName($"floci-{Guid.NewGuid():N}")
-            .WithNetwork(network)
-            .WithNetworkAliases("floci")
-            .WithBindMount("/var/run/docker.sock", "/var/run/docker.sock", AccessMode.ReadWrite)
-            .WithPortBinding(4566, true)
-            .WithEnvironment("LOG_LEVEL", "DEBUG")
-            .WithWaitStrategy(
-                Wait.ForUnixContainer()
-                    .UntilHttpRequestIsSucceeded(request =>
-                        request.ForPort(4566)
-                            .ForPath("/_floci/health")))
-            .Build();
+        //_flociContainer = new FlociBuilder("floci/floci:latest")
+        //    .WithCleanUp(true)
+        //    .WithName($"floci-{Guid.NewGuid():N}")
+        //    .WithNetwork(network)
+        //    .WithNetworkAliases("floci")
+        //    .WithBindMount("/var/run/docker.sock", "/var/run/docker.sock", AccessMode.ReadWrite)
+        //    .WithPortBinding(4566, true)
+        //    .WithEnvironment("LOG_LEVEL", "DEBUG")
+        //    .WithWaitStrategy(
+        //        Wait.ForUnixContainer()
+        //            .UntilHttpRequestIsSucceeded(request =>
+        //                request.ForPort(4566)
+        //                    .ForPath("/_floci/health")))
+        //    .Build();
 
-        await _flociContainer.StartAsync();
+        //await _flociContainer.StartAsync();
     }
 
     [TearDown]
@@ -111,8 +111,9 @@ public class BackendTests
         var stageName = stacks[0].Outputs.FirstOrDefault(o => o.OutputKey == "StageName")?.OutputValue;
         stageName.Should().NotBeNullOrEmpty();
 
-        var serviceUrl = new Uri(_flociContainer.GetConnectionString());
-        var webSocketEndpoint = $"ws://{serviceUrl.Host}:{serviceUrl.Port}/ws/{webSocketApiId}/{stageName}";
+        var serviceUrl = new Uri("http://localhost:4566" /*_flociContainer.GetConnectionString()*/);
+        //var webSocketEndpoint = $"ws://{serviceUrl.Host}:{serviceUrl.Port}/ws/{webSocketApiId}/{stageName}";
+        var webSocketEndpoint = $"ws://{serviceUrl.Host}:{serviceUrl.Port}/_aws/execute-api/{webSocketApiId}/{stageName}";
         Console.WriteLine($"Connecting to WebSocket endpoint: {webSocketEndpoint}");
 
         // Establish websocket connection to service endpoint.

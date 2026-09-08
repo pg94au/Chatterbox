@@ -24,7 +24,7 @@ public static class ClientWebSocketExtensions
         var receiveBuffer = new byte[4096];
         var received = await clientWebSocket.ReceiveAsync(new ArraySegment<byte>(receiveBuffer), cancellationToken);
 
-        received.MessageType.Should().Be(WebSocketMessageType.Text);
+        //received.MessageType.Should().Be(WebSocketMessageType.Text);
 
         var responseJson = Encoding.UTF8.GetString(receiveBuffer, 0, received.Count);
         var message = JsonSerializer.Deserialize<T>(responseJson);

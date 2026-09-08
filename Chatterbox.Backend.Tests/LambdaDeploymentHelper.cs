@@ -122,15 +122,16 @@ public class LambdaDeploymentHelper
         var packagePath = await LambdaDeploymentHelper.CreateLambdaPackage();
 
         Console.WriteLine("Uploading artifact...");
-        await LambdaDeploymentHelper.UploadArtifactAsync(bucketName, bucketKey, packagePath, flociContainer.GetConnectionString());
+        await LambdaDeploymentHelper.UploadArtifactAsync(bucketName, bucketKey, packagePath, "http://localhost:4566" /*flociContainer.GetConnectionString()*/);
 
         var stackName = $"test-stack-{Guid.NewGuid():N}"; // Unique name per test run
 
-        var flociInsideUrl = new UriBuilder(flociContainer.GetConnectionString())
-        {
-            Host = flociContainer.Name.Trim('/'), // Has '/' prefix?
-            Port = 4566
-        };
+        //var flociInsideUrl = new UriBuilder(flociContainer.GetConnectionString())
+        //{
+        //    Host = flociContainer.Name.Trim('/'), // Has '/' prefix?
+        //    Port = 4566
+        //};
+        var flociInsideUrl = new UriBuilder("http://host.docker.internal:4566");
         Console.WriteLine($"Floci inside URL: {flociInsideUrl}");
 
         var createRequest = new CreateStackRequest
