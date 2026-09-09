@@ -105,8 +105,8 @@ public class BackendSteps
         registeredEvent.DisplayName.Should().Be(displayName);
     }
 
-    [Then("the list users request shows only {string}")]
-    public async Task ThenTheListUsersRequestShowsOnly(string displayName)
+    [Then("a list users request returns")]
+    public async Task ThenAListUsersRequestReturns(Table expectedUsers)
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await _webSocketClient.SendMessageAsync(new ListUsersRequest(), cts.Token);
@@ -114,9 +114,17 @@ public class BackendSteps
         var usersEvent = await ReceiveMessage<UsersEvent>(cts.Token);
         usersEvent.Should().NotBeNull();
         usersEvent.Type.Should().Be("users");
-        usersEvent.Users.Should().HaveCount(1);
-        usersEvent.Users.First().DisplayName.Should().Be(displayName);
-        usersEvent.Users.First().ConnectedAt.Should().BeGreaterThan(0);
+
+        var expectedDisplayNames = expectedUsers.Rows.Select(row => row["DisplayName"]).ToArray();
+        usersEvent.Users.Should().HaveCount(expectedDisplayNames.Length);
+
+        var actualDisplayNames = usersEvent.Users.Select(user => user.DisplayName).ToArray();
+        actualDisplayNames.Should().BeEquivalentTo(expectedDisplayNames, options => options.WithStrictOrdering());
+
+        foreach (var user in usersEvent.Users)
+        {
+            user.ConnectedAt.Should().BeGreaterThan(0);
+        }
     }
 
     private async Task<T> ReceiveMessage<T>(CancellationToken cancellationToken) where T : class

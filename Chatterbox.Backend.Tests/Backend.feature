@@ -6,4 +6,6 @@ Scenario: First user can register to an empty chatroom
 	When a register request is sent for "Paul"
 	Then the user joined event is received for "Paul"
 	And the registered event is received for "Paul"
-	And the list users request shows only "Paul"
+	And a list users request returns
+		| DisplayName |
+		| Paul       |
