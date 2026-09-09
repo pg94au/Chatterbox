@@ -1,99 +1,36 @@
-﻿using Amazon.CloudFormation;
-using AwesomeAssertions;
-using DotNet.Testcontainers.Builders;
-using DotNet.Testcontainers.Configurations;
+﻿using AwesomeAssertions;
 using Reqnroll;
 using System.Net.WebSockets;
-using Testcontainers.Floci;
 
 namespace Chatterbox.Backend.Tests;
 
 [Binding]
-public class BackendSteps
+public class BackendSteps(FeatureContext featureContext)
 {
-    private static FlociContainer _flociContainer = null!;
-    private static AmazonCloudFormationClient _cfClient = null!;
-    private string _stackName = null!;
-    private static string _flociNetworkName = string.Empty;
-    private ClientWebSocket _webSocketClient = null!;
-    private string? _webSocketApiId;
-    private string? _stageName;
-
-    [BeforeFeature]
-    public static async Task BeforeFeature()
-    {
-        await StartFlociContainer();
-
-        Console.WriteLine($"Floci at: {_flociContainer.GetConnectionString()}");
-
-        _cfClient = CreateCloudFormationClient();
-    }
-
-    [BeforeScenario]
-    public async Task BeforeScenario()
-    {
-        var templateBody = LoadTemplateYaml();
-
-        _stackName = await LambdaDeploymentHelper.DeployCloudFormation(_flociContainer, _cfClient, templateBody);
-
-        Console.WriteLine($"Deployed stack: {_stackName}");
-
-        var response = await _cfClient.DescribeStacksAsync();
-        var stacks = response.Stacks;
-        stacks.Should().NotBeEmpty();
-
-        _webSocketApiId = stacks[0].Outputs.FirstOrDefault(o => o.OutputKey == "WebSocketApiId")?.OutputValue;
-        _webSocketApiId.Should().NotBeNullOrEmpty();
-
-        _stageName = stacks[0].Outputs.FirstOrDefault(o => o.OutputKey == "StageName")?.OutputValue;
-        _stageName.Should().NotBeNullOrEmpty();
-    }
-
-    [AfterScenario]
-    public async Task AfterScenario()
-    {
-        if (_webSocketClient.State == WebSocketState.Open)
-        {
-            await _webSocketClient.CloseAsync(WebSocketCloseStatus.NormalClosure, "Scenario complete", CancellationToken.None);
-        }
-        _webSocketClient.Dispose();
-
-        await LambdaDeploymentHelper.DeleteCloudFormation(_cfClient, _stackName);
-    }
-
-    [AfterFeature]
-    public static async Task AfterFeature()
-    {
-        await _flociContainer.StopAsync();
-        await _flociContainer.DisposeAsync();
-    }
-
-    [Given("the cloud formation stack is deployed")]
-    public void GivenTheCloudFormationStackIsDeployed()
-    {
-        _cfClient.Should().NotBeNull();
-        _webSocketApiId.Should().NotBeNullOrEmpty();
-        _stageName.Should().NotBeNullOrEmpty();
-    }
-
     [Given("a websocket connection is established")]
     public async Task AWebsocketConnectionIsEstablished()
     {
-        var serviceUrl = new Uri(_flociContainer.GetConnectionString());
-        var webSocketEndpoint = $"ws://{serviceUrl.Host}:{serviceUrl.Port}/ws/{_webSocketApiId}/{_stageName}";
+        var flociServiceUrl = featureContext.Get<Uri>("FlociServiceUrl");
+        var _webSocketApiId = featureContext.Get<string>("WebSocketApiId");
+        var _stageName = featureContext.Get<string>("StageName");
+
+        var webSocketEndpoint = $"ws://{flociServiceUrl.Host}:{flociServiceUrl.Port}/ws/{_webSocketApiId}/{_stageName}";
         Console.WriteLine($"Connecting to WebSocket endpoint: {webSocketEndpoint}");
 
-        _webSocketClient = new ClientWebSocket();
+        var clientWebSocket = featureContext.Get<ClientWebSocket>("ClientWebSocket");
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await _webSocketClient.ConnectAsync(new Uri(webSocketEndpoint), cts.Token);
-        _webSocketClient.State.Should().Be(WebSocketState.Open);
+        await clientWebSocket.ConnectAsync(new Uri(webSocketEndpoint), cts.Token);
+        clientWebSocket.State.Should().Be(WebSocketState.Open);
     }
 
     [When("a register request is sent for {string}")]
     public async Task WhenARegisterRequestIsSentFor(string displayName)
     {
+        var clientWebSocket = featureContext.Get<ClientWebSocket>("ClientWebSocket");
+
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await _webSocketClient.SendMessageAsync(new RegisterRequest(displayName), cts.Token);
+        
+        await clientWebSocket.SendMessageAsync(new RegisterRequest(displayName), cts.Token);
     }
 
     [Then("the user joined event is received for {string}")]
@@ -119,8 +56,11 @@ public class BackendSteps
     [When("a list users request is sent")]
     public async Task WhenAListUsersRequestIsSent()
     {
+        var clientWebSocket = featureContext.Get<ClientWebSocket>("ClientWebSocket");
+
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await _webSocketClient.SendMessageAsync(new ListUsersRequest(), cts.Token);
+
+        await clientWebSocket.SendMessageAsync(new ListUsersRequest(), cts.Token);
     }
 
     [Then("the returned list of users includes")]
@@ -148,8 +88,10 @@ public class BackendSteps
     [Then("a list users request returns")]
     public async Task ThenAListUsersRequestReturns(Table expectedUsers)
     {
+        var clientWebSocket = featureContext.Get<ClientWebSocket>("ClientWebSocket");
+
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await _webSocketClient.SendMessageAsync(new ListUsersRequest(), cts.Token);
+        await clientWebSocket.SendMessageAsync(new ListUsersRequest(), cts.Token);
 
         var usersEvent = await ReceiveMessage<UsersEvent>(cts.Token);
         usersEvent.Should().NotBeNull();
@@ -169,64 +111,10 @@ public class BackendSteps
 
     private async Task<T> ReceiveMessage<T>(CancellationToken cancellationToken) where T : class
     {
-        var message = await _webSocketClient.ReceiveMessage<T>(cancellationToken);
+        var clientWebSocket = featureContext.Get<ClientWebSocket>("ClientWebSocket");
+
+        var message = await clientWebSocket.ReceiveMessage<T>(cancellationToken);
         message.Should().NotBeNull();
         return message!;
-    }
-
-    private static AmazonCloudFormationClient CreateCloudFormationClient()
-    {
-        var config = new AmazonCloudFormationConfig
-        {
-            AuthenticationRegion = "us-east-1",
-            RegionEndpoint = Amazon.RegionEndpoint.USEast1,
-            ServiceURL = _flociContainer.GetConnectionString()
-        };
-
-        return new AmazonCloudFormationClient(config);
-    }
-
-    private static async Task StartFlociContainer()
-    {
-        _flociNetworkName = $"floci_network-{Guid.NewGuid():N}";
-
-        var network = new NetworkBuilder()
-            .WithName(_flociNetworkName)
-            .Build();
-
-        _flociContainer = new FlociBuilder("floci/floci:2.0.1")
-            .WithCleanUp(true)
-            .WithName($"floci-{Guid.NewGuid():N}")
-            .WithNetwork(network)
-            .WithNetworkAliases("floci")
-            .WithBindMount("/var/run/docker.sock", "/var/run/docker.sock", AccessMode.ReadWrite)
-            .WithPortBinding(4566, true)
-            .WithEnvironment("LOG_LEVEL", "DEBUG")
-            .WithWaitStrategy(
-                Wait.ForUnixContainer()
-                    .UntilHttpRequestIsSucceeded(request =>
-                        request.ForPort(4566)
-                            .ForPath("/_floci/health")))
-            .Build();
-
-        await _flociContainer.StartAsync();
-    }
-
-    private static string LoadTemplateYaml()
-    {
-        var directory = new DirectoryInfo(AppContext.BaseDirectory);
-
-        while (directory is not null)
-        {
-            var candidate = Path.Combine(directory.FullName, "template.yaml");
-            if (File.Exists(candidate))
-            {
-                return File.ReadAllText(candidate);
-            }
-
-            directory = directory.Parent;
-        }
-
-        throw new FileNotFoundException("Could not find template.yaml in the repository tree.");
     }
 }
