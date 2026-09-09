@@ -2,24 +2,24 @@
 using AwesomeAssertions;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Configurations;
-using DotNet.Testcontainers.Containers;
-using NUnit.Framework;
+using Reqnroll;
 using System.Net.WebSockets;
 using Testcontainers.Floci;
 
 namespace Chatterbox.Backend.Tests;
 
-[TestFixture]
-public class BackendTests
+[Binding]
+public class BackendSteps
 {
     private FlociContainer _flociContainer = null!;
-
     private AmazonCloudFormationClient _cfClient = null!;
-
     private string _flociNetworkName = string.Empty;
+    private ClientWebSocket _webSocketClient = null!;
+    private string? _webSocketApiId;
+    private string? _stageName;
 
-    [SetUp]
-    public async Task SetUp()
+    [BeforeScenario]
+    public async Task BeforeScenario()
     {
         await StartFlociContainer();
 
@@ -32,6 +32,98 @@ public class BackendTests
         var stackName = await LambdaDeploymentHelper.DeployCloudFormation(_flociContainer, _cfClient, templateBody);
 
         Console.WriteLine($"Deployed stack: {stackName}");
+
+        var response = await _cfClient.DescribeStacksAsync();
+        var stacks = response.Stacks;
+        stacks.Should().NotBeEmpty();
+
+        _webSocketApiId = stacks[0].Outputs.FirstOrDefault(o => o.OutputKey == "WebSocketApiId")?.OutputValue;
+        _webSocketApiId.Should().NotBeNullOrEmpty();
+
+        _stageName = stacks[0].Outputs.FirstOrDefault(o => o.OutputKey == "StageName")?.OutputValue;
+        _stageName.Should().NotBeNullOrEmpty();
+    }
+
+    [AfterScenario]
+    public async Task AfterScenario()
+    {
+        if (_webSocketClient.State == WebSocketState.Open)
+        {
+            await _webSocketClient.CloseAsync(WebSocketCloseStatus.NormalClosure, "Scenario complete", CancellationToken.None);
+        }
+        _webSocketClient.Dispose();
+
+        await _flociContainer.StopAsync();
+        await _flociContainer.DisposeAsync();
+    }
+
+    [Given("the cloud formation stack is deployed")]
+    public void GivenTheCloudFormationStackIsDeployed()
+    {
+        _cfClient.Should().NotBeNull();
+        _webSocketApiId.Should().NotBeNullOrEmpty();
+        _stageName.Should().NotBeNullOrEmpty();
+    }
+
+    [Given("a websocket connection is established")]
+    public async Task AWebsocketConnectionIsEstablished()
+    {
+        var serviceUrl = new Uri(_flociContainer.GetConnectionString());
+        var webSocketEndpoint = $"ws://{serviceUrl.Host}:{serviceUrl.Port}/ws/{_webSocketApiId}/{_stageName}";
+        Console.WriteLine($"Connecting to WebSocket endpoint: {webSocketEndpoint}");
+
+        _webSocketClient = new ClientWebSocket();
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await _webSocketClient.ConnectAsync(new Uri(webSocketEndpoint), cts.Token);
+        _webSocketClient.State.Should().Be(WebSocketState.Open);
+    }
+
+    [When("a register request is sent for {string}")]
+    public async Task WhenARegisterRequestIsSentFor(string displayName)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await _webSocketClient.SendMessageAsync(new RegisterRequest(displayName), cts.Token);
+    }
+
+    [Then("the user joined event is received for {string}")]
+    public async Task ThenTheUserJoinedEventIsReceivedFor(string displayName)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var userJoinedEvent = await ReceiveMessage<UserJoinedEvent>(cts.Token);
+        userJoinedEvent.Should().NotBeNull();
+        userJoinedEvent!.Type.Should().Be("userJoined");
+        userJoinedEvent.DisplayName.Should().Be(displayName);
+    }
+
+    [Then("the registered event is received for {string}")]
+    public async Task ThenTheRegisteredEventIsReceivedFor(string displayName)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var registeredEvent = await ReceiveMessage<RegisteredEvent>(cts.Token);
+        registeredEvent.Should().NotBeNull();
+        registeredEvent.Type.Should().Be("registered");
+        registeredEvent.DisplayName.Should().Be(displayName);
+    }
+
+    [Then("the list users request shows only {string}")]
+    public async Task ThenTheListUsersRequestShowsOnly(string displayName)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await _webSocketClient.SendMessageAsync(new ListUsersRequest(), cts.Token);
+
+        var usersEvent = await ReceiveMessage<UsersEvent>(cts.Token);
+        usersEvent.Should().NotBeNull();
+        usersEvent.Type.Should().Be("users");
+        usersEvent.Users.Should().HaveCount(1);
+        usersEvent.Users.First().DisplayName.Should().Be(displayName);
+        usersEvent.Users.First().ConnectedAt.Should().BeGreaterThan(0);
+    }
+
+    private async Task<T> ReceiveMessage<T>(CancellationToken cancellationToken) where T : class
+    {
+        var message = await _webSocketClient.ReceiveMessage<T>(cancellationToken);
+        message.Should().NotBeNull();
+        return message!;
     }
 
     private AmazonCloudFormationClient CreateCloudFormationClient()
@@ -54,8 +146,6 @@ public class BackendTests
             .WithName(_flociNetworkName)
             .Build();
 
-        var sessionId = ResourceReaper.DefaultSessionId;
-
         _flociContainer = new FlociBuilder("floci/floci:latest")
             .WithCleanUp(true)
             .WithName($"floci-{Guid.NewGuid():N}")
@@ -72,71 +162,6 @@ public class BackendTests
             .Build();
 
         await _flociContainer.StartAsync();
-    }
-
-    [TearDown]
-    public async Task TearDown()
-    {
-        if (_flociContainer is not null)
-        {
-            await _flociContainer.StopAsync();
-            await _flociContainer.DisposeAsync();
-        }
-    }
-
-
-    [Test]
-    public async Task FirstUserCanRegisterToEmptyChatroom()
-    {
-        var response = await _cfClient.DescribeStacksAsync();
-        var stacks = response.Stacks;
-        stacks.Should().NotBeEmpty();
-
-        var webSocketApiId = stacks[0].Outputs.FirstOrDefault(o => o.OutputKey == "WebSocketApiId")?.OutputValue;
-        webSocketApiId.Should().NotBeNullOrEmpty();
-
-        var stageName = stacks[0].Outputs.FirstOrDefault(o => o.OutputKey == "StageName")?.OutputValue;
-        stageName.Should().NotBeNullOrEmpty();
-
-        var serviceUrl = new Uri(_flociContainer.GetConnectionString());
-        var webSocketEndpoint = $"ws://{serviceUrl.Host}:{serviceUrl.Port}/ws/{webSocketApiId}/{stageName}";
-        Console.WriteLine($"Connecting to WebSocket endpoint: {webSocketEndpoint}");
-
-        // Establish websocket connection to service endpoint.
-        using var client = new ClientWebSocket();
-        using var cancellation = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        await client.ConnectAsync(new Uri(webSocketEndpoint!), cancellation.Token);
-        client.State.Should().Be(WebSocketState.Open);
-
-        using var testTimeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-
-        // Register as a new user.
-        var registerRequest = new RegisterRequest("Paul");
-        await client.SendMessageAsync(registerRequest, testTimeoutCts.Token);
-
-        // Should receive user joined event.
-        var userJoinedEvent = await client.ReceiveMessage<UserJoinedEvent>(testTimeoutCts.Token);
-        userJoinedEvent.Should().NotBeNull();
-        userJoinedEvent!.Type.Should().Be("userJoined");
-        userJoinedEvent.DisplayName.Should().Be("Paul");
-
-        // Should receive registered event.
-        var registeredEvent = await client.ReceiveMessage<RegisteredEvent>(testTimeoutCts.Token);
-        registeredEvent.Should().NotBeNull();
-        registeredEvent.Type.Should().Be("registered");
-        registeredEvent.DisplayName.Should().Be("Paul");
-
-        // List users.
-        var listUsersRequest = new ListUsersRequest();
-        await client.SendMessageAsync(listUsersRequest, testTimeoutCts.Token);
-
-        // Should receive users event with the registered user.
-        var usersEvent = await client.ReceiveMessage<UsersEvent>(testTimeoutCts.Token);
-        usersEvent.Should().NotBeNull();
-        usersEvent.Type.Should().Be("users");
-        usersEvent.Users.Should().HaveCount(1);
-        usersEvent.Users.First().DisplayName.Should().Be("Paul");
-        usersEvent.Users.First().ConnectedAt.Should().BeGreaterThan(0);
     }
 
     private static string LoadTemplateYaml()
@@ -157,3 +182,719 @@ public class BackendTests
         throw new FileNotFoundException("Could not find template.yaml in the repository tree.");
     }
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
