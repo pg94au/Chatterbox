@@ -11,27 +11,32 @@ namespace Chatterbox.Backend.Tests;
 [Binding]
 public class BackendSteps
 {
-    private FlociContainer _flociContainer = null!;
-    private AmazonCloudFormationClient _cfClient = null!;
-    private string _flociNetworkName = string.Empty;
+    private static FlociContainer _flociContainer = null!;
+    private static AmazonCloudFormationClient _cfClient = null!;
+    private string _stackName = null!;
+    private static string _flociNetworkName = string.Empty;
     private ClientWebSocket _webSocketClient = null!;
     private string? _webSocketApiId;
     private string? _stageName;
 
-    [BeforeScenario]
-    public async Task BeforeScenario()
+    [BeforeFeature]
+    public static async Task BeforeFeature()
     {
         await StartFlociContainer();
 
         Console.WriteLine($"Floci at: {_flociContainer.GetConnectionString()}");
 
         _cfClient = CreateCloudFormationClient();
+    }
 
+    [BeforeScenario]
+    public async Task BeforeScenario()
+    {
         var templateBody = LoadTemplateYaml();
 
-        var stackName = await LambdaDeploymentHelper.DeployCloudFormation(_flociContainer, _cfClient, templateBody);
+        _stackName = await LambdaDeploymentHelper.DeployCloudFormation(_flociContainer, _cfClient, templateBody);
 
-        Console.WriteLine($"Deployed stack: {stackName}");
+        Console.WriteLine($"Deployed stack: {_stackName}");
 
         var response = await _cfClient.DescribeStacksAsync();
         var stacks = response.Stacks;
@@ -53,6 +58,12 @@ public class BackendSteps
         }
         _webSocketClient.Dispose();
 
+        await LambdaDeploymentHelper.DeleteCloudFormation(_cfClient, _stackName);
+    }
+
+    [AfterFeature]
+    public static async Task AfterFeature()
+    {
         await _flociContainer.StopAsync();
         await _flociContainer.DisposeAsync();
     }
@@ -105,6 +116,35 @@ public class BackendSteps
         registeredEvent.DisplayName.Should().Be(displayName);
     }
 
+    [When("a list users request is sent")]
+    public async Task WhenAListUsersRequestIsSent()
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await _webSocketClient.SendMessageAsync(new ListUsersRequest(), cts.Token);
+    }
+
+    [Then("the returned list of users includes")]
+    public async Task ThenTheReturnedListOfUsersIncludes(Table expectedUsers)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        var usersEvent = await ReceiveMessage<UsersEvent>(cts.Token);
+        usersEvent.Should().NotBeNull();
+        usersEvent.Type.Should().Be("users");
+
+        var expectedDisplayNames = expectedUsers.Rows.Select(row => row["DisplayName"]).ToArray();
+        usersEvent.Users.Should().HaveCount(expectedDisplayNames.Length);
+
+        var actualDisplayNames = usersEvent.Users.Select(user => user.DisplayName).ToArray();
+        actualDisplayNames.Should().BeEquivalentTo(expectedDisplayNames, options => options.WithoutStrictOrdering());
+
+        foreach (var user in usersEvent.Users)
+        {
+            user.ConnectedAt.Should().BeGreaterThan(0);
+        }
+    }
+
+
     [Then("a list users request returns")]
     public async Task ThenAListUsersRequestReturns(Table expectedUsers)
     {
@@ -134,7 +174,7 @@ public class BackendSteps
         return message!;
     }
 
-    private AmazonCloudFormationClient CreateCloudFormationClient()
+    private static AmazonCloudFormationClient CreateCloudFormationClient()
     {
         var config = new AmazonCloudFormationConfig
         {
@@ -146,7 +186,7 @@ public class BackendSteps
         return new AmazonCloudFormationClient(config);
     }
 
-    private async Task StartFlociContainer()
+    private static async Task StartFlociContainer()
     {
         _flociNetworkName = $"floci_network-{Guid.NewGuid():N}";
 
@@ -154,7 +194,7 @@ public class BackendSteps
             .WithName(_flociNetworkName)
             .Build();
 
-        _flociContainer = new FlociBuilder("floci/floci:latest")
+        _flociContainer = new FlociBuilder("floci/floci:2.0.1")
             .WithCleanUp(true)
             .WithName($"floci-{Guid.NewGuid():N}")
             .WithNetwork(network)
@@ -190,719 +230,3 @@ public class BackendSteps
         throw new FileNotFoundException("Could not find template.yaml in the repository tree.");
     }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
