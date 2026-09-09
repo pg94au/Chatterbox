@@ -16,8 +16,6 @@ public class BackendTests
 
     private AmazonCloudFormationClient _cfClient = null!;
 
-    private string _stackName = string.Empty;
-
     private string _flociNetworkName = string.Empty;
 
     [SetUp]
@@ -31,7 +29,9 @@ public class BackendTests
 
         var templateBody = LoadTemplateYaml();
 
-        _stackName = await LambdaDeploymentHelper.DeployCloudFormation(_flociContainer, _cfClient, templateBody);
+        var stackName = await LambdaDeploymentHelper.DeployCloudFormation(_flociContainer, _cfClient, templateBody);
+
+        Console.WriteLine($"Deployed stack: {stackName}");
     }
 
     private AmazonCloudFormationClient CreateCloudFormationClient()
@@ -77,18 +77,8 @@ public class BackendTests
     [TearDown]
     public async Task TearDown()
     {
-        if (!string.IsNullOrWhiteSpace(_stackName))
-        {
-            Console.WriteLine($"Deleting CloudFormation stack: {_stackName}");
-            await LambdaDeploymentHelper.DeleteCloudFormation(_cfClient, _stackName);
-        }
-
-        await LambdaDeploymentHelper.CleanupDockerNetworkAsync(_flociNetworkName);
-
         if (_flociContainer is not null)
         {
-            await Task.Delay(TimeSpan.FromSeconds(3));
-
             await _flociContainer.StopAsync();
             await _flociContainer.DisposeAsync();
         }
