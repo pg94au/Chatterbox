@@ -82,6 +82,15 @@ public class BackendSteps(FeatureContext featureContext)
         }
     }
 
+    [Then("no response is received from (.+)")]
+    public async Task ThenNoResponseIsReceivedFrom(string websocketName)
+    {
+        var webSocket = GetWebSocketConnection(websocketName);
+
+        await webSocket.NothingReceived(TimeSpan.FromSeconds(5));
+    }
+
+
     private ClientWebSocket GetWebSocketConnection(string websocketName)
     {
         var webSockets = featureContext.ContainsKey("WebSocketConnections")

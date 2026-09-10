@@ -26,7 +26,7 @@ public class Functions
     [LambdaFunction]
     public async Task<APIGatewayProxyResponse> Handler(APIGatewayProxyRequest request)
     {
-        _logger.LogInformation("Lambda handler invoked for route {RouteKey} and needs to process the request.", request.RequestContext.RouteKey);
+        _logger.LogInformation("Lambda handler invoked for route {RouteKey}", request.RequestContext.RouteKey);
 
         var routeKey = request.RequestContext.RouteKey;
 
@@ -79,6 +79,7 @@ public class Functions
 
         if (string.IsNullOrWhiteSpace(body.DisplayName))
         {
+            _logger.LogWarning("Register request received with empty display name for connection {ConnectionId}", connectionId);
             await SendToConnection(
                 apiClient,
                 connectionId,
@@ -87,11 +88,13 @@ public class Functions
 
             return;
         }
+        _logger.LogTrace("Registering user with display name {DisplayName} for connection {ConnectionId}", body.DisplayName, connectionId);
 
         // Is this connection already registered?
         var existingConnection = await _connectionsStore.FindByConnectionIdAsync(connectionId);
         if (existingConnection is not null)
         {
+            _logger.LogInformation("Connection {ConnectionId} has already been registered", connectionId);
             await SendToConnection(
                 apiClient,
                 connectionId,
@@ -105,6 +108,7 @@ public class Functions
         var existingName = await _connectionsStore.LoadByDisplayNameAsync(body.DisplayName);
         if (existingName is not null)
         {
+            _logger.LogInformation("Display name {DisplayName} is already in use by connection {ConnectionId}", body.DisplayName, existingName.ConnectionId);
             try
             {
                 await SendToConnection(
@@ -113,6 +117,7 @@ public class Functions
                     new KickedEvent("Another session registered using this name.")
                 );
 
+                _logger.LogTrace("Deleting replaced connection {ConnectionId} for display name {DisplayName}", existingName.ConnectionId, body.DisplayName);
                 await apiClient.DeleteConnectionAsync(
                     new DeleteConnectionRequest
                     {
@@ -126,6 +131,7 @@ public class Functions
             }
         }
 
+        _logger.LogTrace("Saving presence record for display name {DisplayName} and connection {ConnectionId}", body.DisplayName, connectionId);
         await _connectionsStore.SaveAsync(
             new PresenceRecord
             {
@@ -134,13 +140,15 @@ public class Functions
                 ConnectedAt = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()
             });
 
+        _logger.LogTrace("Sending RegisteredEvent to connection {ConnectionId} for display name {DisplayName}", connectionId, body.DisplayName);
+        await SendToConnection(apiClient, connectionId, new RegisteredEvent(body.DisplayName));
+
         var isNewUser = existingName is null;
         if (isNewUser)
         {
+            _logger.LogTrace("Broadcasting UserJoinedEvent for display name {DisplayName}", body.DisplayName);
             await Broadcast(apiClient, new UserJoinedEvent(body.DisplayName));
         }
-
-        await SendToConnection(apiClient, connectionId, new RegisteredEvent(body.DisplayName));
     }
 
     private async Task HandleDisconnect(APIGatewayProxyRequest request)
@@ -160,6 +168,14 @@ public class Functions
 
     private async Task HandleListUsers(APIGatewayProxyRequest request)
     {
+        // Do not send the list of users to a connection that is not registered.
+        var connectionId = request.RequestContext.ConnectionId;
+        var user = await _connectionsStore.FindByConnectionIdAsync(connectionId);
+        if (user is null)
+        {
+            return;
+        }
+
         var apiClient = CreateManagementClient(request);
 
         var users = await _connectionsStore.GetAllAsync();
@@ -249,6 +265,7 @@ public class Functions
         {
             try
             {
+                _logger.LogTrace("Broadcasting {Payload} to connection {ConnectionId}", payload, item.ConnectionId);
                 await SendToConnection(apiClient, item.ConnectionId, payload);
             }
             catch (Exception ex)

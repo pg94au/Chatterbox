@@ -16,7 +16,7 @@ public class Startup
         var hostBuilder = new HostApplicationBuilder();
 
         Log.Logger = new LoggerConfiguration()
-            .MinimumLevel.Information()
+            .MinimumLevel.Verbose() // TODO: Allow this to be configured
             .Enrich.FromLogContext()
             .WriteTo.Console()
             .CreateLogger();
