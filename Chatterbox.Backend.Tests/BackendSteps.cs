@@ -7,68 +7,66 @@ namespace Chatterbox.Backend.Tests;
 [Binding]
 public class BackendSteps(FeatureContext featureContext)
 {
-    [Given("a websocket connection is established")]
-    public async Task AWebsocketConnectionIsEstablished()
+    [Given(@"a websocket connection (.+) is established")]
+    public async Task AWebsocketConnectionIsEstablished(string websocketName)
     {
+        var webSocket = GetWebSocketConnection(websocketName);
         var flociServiceUrl = featureContext.Get<Uri>("FlociServiceUrl");
-        var _webSocketApiId = featureContext.Get<string>("WebSocketApiId");
-        var _stageName = featureContext.Get<string>("StageName");
+        var webSocketApiId = featureContext.Get<string>("WebSocketApiId");
+        var stageName = featureContext.Get<string>("StageName");
 
-        var webSocketEndpoint = $"ws://{flociServiceUrl.Host}:{flociServiceUrl.Port}/ws/{_webSocketApiId}/{_stageName}";
-        Console.WriteLine($"Connecting to WebSocket endpoint: {webSocketEndpoint}");
+        var webSocketEndpoint = $"ws://{flociServiceUrl.Host}:{flociServiceUrl.Port}/ws/{webSocketApiId}/{stageName}";
+        Console.WriteLine($"Connecting websocket '{websocketName}' to endpoint: {webSocketEndpoint}");
 
-        var clientWebSocket = featureContext.Get<ClientWebSocket>("ClientWebSocket");
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await clientWebSocket.ConnectAsync(new Uri(webSocketEndpoint), cts.Token);
-        clientWebSocket.State.Should().Be(WebSocketState.Open);
+        await webSocket.ConnectAsync(new Uri(webSocketEndpoint), cts.Token);
+        webSocket.State.Should().Be(WebSocketState.Open);
     }
 
-    [When("a register request is sent for {string}")]
-    public async Task WhenARegisterRequestIsSentFor(string displayName)
+    [When("a register request is sent to (.+) for \"(.*)\"")]
+    public async Task WhenARegisterRequestIsSentTo(string websocketName, string displayName)
     {
-        var clientWebSocket = featureContext.Get<ClientWebSocket>("ClientWebSocket");
+        var webSocket = GetWebSocketConnection(websocketName);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        
-        await clientWebSocket.SendMessageAsync(new RegisterRequest(displayName), cts.Token);
+        await webSocket.SendMessageAsync(new RegisterRequest(displayName), cts.Token);
     }
 
-    [Then("the user joined event is received for {string}")]
-    public async Task ThenTheUserJoinedEventIsReceivedFor(string displayName)
+    [Then("the user joined event is received from (.+) for \"(.*)\"")]
+    public async Task ThenTheUserJoinedEventIsReceivedFrom(string websocketName, string displayName)
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var userJoinedEvent = await ReceiveMessage<UserJoinedEvent>(cts.Token);
+        var userJoinedEvent = await ReceiveMessage<UserJoinedEvent>(websocketName, cts.Token);
         userJoinedEvent.Should().NotBeNull();
         userJoinedEvent!.Type.Should().Be("userJoined");
         userJoinedEvent.DisplayName.Should().Be(displayName);
     }
 
-    [Then("the registered event is received for {string}")]
-    public async Task ThenTheRegisteredEventIsReceivedFor(string displayName)
+    [Then("the registered event is received from (.+) for \"(.*)\"")]
+    public async Task ThenTheRegisteredEventIsReceivedFrom(string websocketName, string displayName)
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var registeredEvent = await ReceiveMessage<RegisteredEvent>(cts.Token);
+        var registeredEvent = await ReceiveMessage<RegisteredEvent>(websocketName, cts.Token);
         registeredEvent.Should().NotBeNull();
         registeredEvent.Type.Should().Be("registered");
         registeredEvent.DisplayName.Should().Be(displayName);
     }
 
-    [When("a list users request is sent")]
-    public async Task WhenAListUsersRequestIsSent()
+    [When(@"a list users request is sent to (.+)")]
+    public async Task WhenAListUsersRequestIsSentTo(string websocketName)
     {
-        var clientWebSocket = featureContext.Get<ClientWebSocket>("ClientWebSocket");
+        var webSocket = GetWebSocketConnection(websocketName);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-
-        await clientWebSocket.SendMessageAsync(new ListUsersRequest(), cts.Token);
+        await webSocket.SendMessageAsync(new ListUsersRequest(), cts.Token);
     }
 
-    [Then("the returned list of users includes")]
-    public async Task ThenTheReturnedListOfUsersIncludes(Table expectedUsers)
+    [Then(@"the returned list of users from (.+) includes")]
+    public async Task ThenTheReturnedListOfUsersFromIncludes(string websocketName, Table expectedUsers)
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
 
-        var usersEvent = await ReceiveMessage<UsersEvent>(cts.Token);
+        var usersEvent = await ReceiveMessage<UsersEvent>(websocketName, cts.Token);
         usersEvent.Should().NotBeNull();
         usersEvent.Type.Should().Be("users");
 
@@ -84,36 +82,28 @@ public class BackendSteps(FeatureContext featureContext)
         }
     }
 
-
-    [Then("a list users request returns")]
-    public async Task ThenAListUsersRequestReturns(Table expectedUsers)
+    private ClientWebSocket GetWebSocketConnection(string websocketName)
     {
-        var clientWebSocket = featureContext.Get<ClientWebSocket>("ClientWebSocket");
+        var webSockets = featureContext.ContainsKey("WebSocketConnections")
+            ? featureContext.Get<Dictionary<string, ClientWebSocket>>("WebSocketConnections")
+            : new Dictionary<string, ClientWebSocket>();
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await clientWebSocket.SendMessageAsync(new ListUsersRequest(), cts.Token);
-
-        var usersEvent = await ReceiveMessage<UsersEvent>(cts.Token);
-        usersEvent.Should().NotBeNull();
-        usersEvent.Type.Should().Be("users");
-
-        var expectedDisplayNames = expectedUsers.Rows.Select(row => row["DisplayName"]).ToArray();
-        usersEvent.Users.Should().HaveCount(expectedDisplayNames.Length);
-
-        var actualDisplayNames = usersEvent.Users.Select(user => user.DisplayName).ToArray();
-        actualDisplayNames.Should().BeEquivalentTo(expectedDisplayNames, options => options.WithStrictOrdering());
-
-        foreach (var user in usersEvent.Users)
+        if (webSockets.TryGetValue(websocketName, out var existingWebSocket))
         {
-            user.ConnectedAt.Should().BeGreaterThan(0);
+            return existingWebSocket;
         }
+
+        var newWebSocket = new ClientWebSocket();
+        webSockets[websocketName] = newWebSocket;
+        featureContext.Set(webSockets, "WebSocketConnections");
+        return newWebSocket;
     }
 
-    private async Task<T> ReceiveMessage<T>(CancellationToken cancellationToken) where T : class
+    private async Task<T> ReceiveMessage<T>(string websocketName, CancellationToken cancellationToken) where T : class
     {
-        var clientWebSocket = featureContext.Get<ClientWebSocket>("ClientWebSocket");
+        var webSocket = GetWebSocketConnection(websocketName);
 
-        var message = await clientWebSocket.ReceiveMessage<T>(cancellationToken);
+        var message = await webSocket.ReceiveMessage<T>(cancellationToken);
         message.Should().NotBeNull();
         return message!;
     }

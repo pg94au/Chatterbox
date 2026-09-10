@@ -1,8 +1,11 @@
-﻿using Amazon.CloudFormation;
+using Amazon.CloudFormation;
 using AwesomeAssertions;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Configurations;
 using Reqnroll;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 using System.Net.WebSockets;
 using Testcontainers.Floci;
 
@@ -14,10 +17,9 @@ public class TestLifecycle
     private static FlociContainer _flociContainer = null!;
     private static AmazonCloudFormationClient _cfClient = null!;
     private static string _flociNetworkName = string.Empty;
-    private string _stackName = null!;
+    private string _stackName = string.Empty;
     private string? _webSocketApiId;
     private string? _stageName;
-    //private ClientWebSocket _webSocketClient = null!;
 
     [BeforeFeature]
     public static async Task BeforeFeature(FeatureContext featureContext)
@@ -51,21 +53,44 @@ public class TestLifecycle
         _stageName.Should().NotBeNullOrEmpty();
         featureContext.Set(_stageName, "StageName");
 
-        var clientWebSocket = new ClientWebSocket();
-        featureContext.Set(clientWebSocket, "ClientWebSocket");
+        var defaultWebSocket = new ClientWebSocket();
+        var webSockets = new Dictionary<string, ClientWebSocket>
+        {
+            ["default"] = defaultWebSocket
+        };
+
+        featureContext.Set(webSockets, "WebSocketConnections");
+        featureContext.Set(defaultWebSocket, "ClientWebSocket");
     }
 
     [AfterScenario]
     public async Task AfterScenario(FeatureContext featureContext)
     {
-        var clientWebSocket = featureContext.Get<ClientWebSocket>("ClientWebSocket");
-        if (clientWebSocket.State == WebSocketState.Open)
+        if (featureContext.ContainsKey("WebSocketConnections"))
         {
-            await clientWebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Scenario complete", CancellationToken.None);
-        }
-        clientWebSocket.Dispose();
+            var webSockets = featureContext.Get<Dictionary<string, ClientWebSocket>>("WebSocketConnections");
+            foreach (var clientWebSocket in webSockets.Values)
+            {
+                if (clientWebSocket.State == WebSocketState.Open)
+                {
+                    await clientWebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Scenario complete", CancellationToken.None);
+                }
 
-        await LambdaDeploymentHelper.DeleteCloudFormation(_cfClient, _stackName);
+                clientWebSocket.Dispose();
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(_stackName))
+        {
+            await LambdaDeploymentHelper.DeleteCloudFormation(_cfClient, _stackName);
+        }
+    }
+
+    [AfterScenario]
+    public void AfterScenarioCleanup(FeatureContext featureContext)
+    {
+        featureContext.Remove("WebSocketConnections");
+        featureContext.Remove("ClientWebSocket");
     }
 
     [AfterFeature]
