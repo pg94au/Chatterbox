@@ -44,9 +44,9 @@ public static class ClientWebSocketExtensions
 
     public static async Task NothingReceived(this ClientWebSocket clientWebSocket, TimeSpan timeout)
     {
-        var timeoutCts = new CancellationTokenSource(timeout);
-        var tooLongCts = new CancellationTokenSource(timeout.Add(TimeSpan.FromMilliseconds(100)));
-        var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, tooLongCts.Token);
+        using var timeoutCts = new CancellationTokenSource(timeout);
+        using var tooLongCts = new CancellationTokenSource(timeout.Add(TimeSpan.FromMilliseconds(100)));
+        using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(timeoutCts.Token, tooLongCts.Token);
 
         var receiveBuffer = new byte[4096];
         try

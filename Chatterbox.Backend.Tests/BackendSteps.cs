@@ -108,7 +108,7 @@ public class BackendSteps(FeatureContext featureContext)
     {
         var webSocket = GetWebSocketConnection(websocketName);
 
-        await webSocket.NothingReceived(TimeSpan.FromSeconds(5));
+        await webSocket.NothingReceived(TimeSpan.FromSeconds(3));
     }
 
 
