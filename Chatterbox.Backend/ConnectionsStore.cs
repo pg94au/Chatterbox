@@ -15,18 +15,26 @@ public sealed class ConnectionsStore
     {
         _client = client;
         _context = context;
-        _tableName = configuration["CONNECTIONS_TABLE"]
-            ?? throw new InvalidOperationException("CONNECTIONS_TABLE not configured");
+        _tableName = configuration["CONNECTIONS_TABLE"] ?? throw new InvalidOperationException("CONNECTIONS_TABLE not configured");
     }
 
-    internal Task<PresenceRecord?> LoadByDisplayNameAsync(string displayName) =>
-        _context.LoadAsync<PresenceRecord?>(displayName, CreateTableConfig());
+    internal Task<PresenceRecord> LoadByDisplayNameAsync(string displayName) =>
+        _context.LoadAsync<PresenceRecord>(
+            displayName,
+            new LoadConfig { OverrideTableName = _tableName }
+        );
 
     internal Task SaveAsync(PresenceRecord record) =>
-        _context.SaveAsync(record, CreateTableConfig());
+        _context.SaveAsync(
+            record,
+            new SaveConfig { OverrideTableName = _tableName }
+        );
 
     internal Task DeleteByDisplayNameAsync(string displayName) =>
-        _context.DeleteAsync<PresenceRecord>(displayName, CreateTableConfig());
+        _context.DeleteAsync<PresenceRecord>(
+            displayName,
+            new DeleteConfig { OverrideTableName = _tableName }
+        );
 
     internal async Task<PresenceRecord?> FindByConnectionIdAsync(string connectionId)
     {
@@ -54,17 +62,11 @@ public sealed class ConnectionsStore
     {
         var search = _context.ScanAsync<PresenceRecord>(
             new List<ScanCondition>(),
-            CreateTableConfig()
+            new ScanConfig { OverrideTableName = _tableName }
         );
 
         return await search.GetRemainingAsync();
     }
-
-    private DynamoDBOperationConfig CreateTableConfig() =>
-        new()
-        {
-            OverrideTableName = _tableName
-        };
 
     private static PresenceRecord ToPresenceRecord(Dictionary<string, AttributeValue> item) =>
         new()

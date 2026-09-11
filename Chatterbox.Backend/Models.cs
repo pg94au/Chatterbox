@@ -17,7 +17,10 @@ public record ListUsersRequest()
 public record MessageRequest(
     [property: JsonPropertyName("to")] string To,
     [property: JsonPropertyName("text")] string Text
-);
+)
+{
+    [JsonPropertyName("action")] public string Action => "message";
+}
 
 public record RegisteredEvent([property: JsonPropertyName("displayName")] string DisplayName)
 {

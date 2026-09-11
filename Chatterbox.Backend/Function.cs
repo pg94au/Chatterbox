@@ -163,6 +163,7 @@ public class Functions
 
         await _connectionsStore.DeleteByDisplayNameAsync(record.DisplayName);
 
+        _logger.LogTrace("Broadcasting UserLeftEvent for display name {DisplayName}", record.DisplayName);
         await Broadcast(CreateManagementClient(request), new UserLeftEvent(record.DisplayName));
     }
 
@@ -205,6 +206,7 @@ public class Functions
         var sender = await _connectionsStore.FindByConnectionIdAsync(senderConnectionId);
         if (sender is null)
         {
+            _logger.LogTrace("Sender not registered for connection {ConnectionId}.  Ignoring message request.", senderConnectionId);
             await SendToConnection(
                 apiClient,
                 senderConnectionId,
@@ -213,16 +215,19 @@ public class Functions
 
             return;
         }
+        _logger.LogTrace("Sender {Sender} is sending a message to {Recipient}", sender.DisplayName, body.To);
 
         var recipient = await _connectionsStore.LoadByDisplayNameAsync(body.To);
 
         if (recipient is null)
         {
+            _logger.LogTrace("Recipient {Recipient} is not online.  Ignoring message request.", body.To);
             await SendToConnection(apiClient, senderConnectionId, new ErrorEvent("user_not_online"));
 
             return;
         }
 
+        _logger.LogInformation("Sending message from {Sender} to {Recipient}", sender.DisplayName, body.To);
         await SendToConnection(
             apiClient,
             recipient.ConnectionId,

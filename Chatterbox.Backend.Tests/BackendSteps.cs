@@ -103,6 +103,28 @@ public class BackendSteps(FeatureContext featureContext)
         }
     }
 
+    [When("a send message request is sent to (.+) for \"(.+)\" with the message \"(.*)\"")]
+    public async Task WhenASendMessageRequestIsSentToAForWithTheMessage(string websocketName, string receipientName, string text)
+    {
+        var webSocket = GetWebSocketConnection(websocketName);
+
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        await webSocket.SendMessageAsync(new MessageRequest(receipientName, text), cts.Token);
+    }
+
+    [Then("the message event is received from (.+) with the message \"(.*)\" from \"(.+)\"")]
+    public async Task ThenTheMessageEventIsReceivedFromBWithTheMessageFrom(string websocketName, string text, string from)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        var messageEvent = await ReceiveMessage<MessageEvent>(websocketName, cts.Token);
+        messageEvent.Should().NotBeNull();
+        messageEvent!.Type.Should().Be("message");
+        
+        messageEvent.Text.Should().Be(text);
+        messageEvent.From.Should().Be(from);
+    }
+
     [Then("no response is received from (.+)")]
     public async Task ThenNoResponseIsReceivedFrom(string websocketName)
     {

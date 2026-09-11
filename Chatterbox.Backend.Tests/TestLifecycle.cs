@@ -3,9 +3,6 @@ using AwesomeAssertions;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Configurations;
 using Reqnroll;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
 using System.Net.WebSockets;
 using Testcontainers.Floci;
 
