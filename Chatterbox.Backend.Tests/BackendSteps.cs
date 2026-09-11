@@ -23,6 +23,17 @@ public class BackendSteps(FeatureContext featureContext)
         webSocket.State.Should().Be(WebSocketState.Open);
     }
 
+    [When("websocket connection (.+) is closed")]
+    public void WhenWebsocketConnectionIsClosed(string websocketName)
+    {
+        var webSocket = GetWebSocketConnection(websocketName);
+        if (webSocket.State == WebSocketState.Open)
+        {
+            webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, $"Closing connection {websocketName}", CancellationToken.None).Wait();
+        }
+    }
+
+
     [When("a register request is sent to (.+) for \"(.*)\"")]
     public async Task WhenARegisterRequestIsSentTo(string websocketName, string displayName)
     {
@@ -40,6 +51,16 @@ public class BackendSteps(FeatureContext featureContext)
         userJoinedEvent.Should().NotBeNull();
         userJoinedEvent!.Type.Should().Be("userJoined");
         userJoinedEvent.DisplayName.Should().Be(displayName);
+    }
+
+    [Then("the user left event is received from (.+) for \"(.*)\"")]
+    public async Task ThenTheUserLeftEventIsReceivedFrom(string websocketName, string displayName)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var userLeftEvent = await ReceiveMessage<UserLeftEvent>(websocketName, cts.Token);
+        userLeftEvent.Should().NotBeNull();
+        userLeftEvent!.Type.Should().Be("userLeft");
+        userLeftEvent.DisplayName.Should().Be(displayName);
     }
 
     [Then("the registered event is received from (.+) for \"(.*)\"")]

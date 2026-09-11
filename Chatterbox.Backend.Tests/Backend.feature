@@ -17,14 +17,18 @@ Scenario: First user can register to an empty chatroom
 		| DisplayName |
 		| Paul       |
 
-Scenario: Subsequent users can register and see existing users
+Scenario: Existing users are notified when a user joins or leaves
 	Given the cloud formation stack is deployed
 	And a websocket connection A is established
 	When a register request is sent to A for "Alice"
 	Then the registered event is received from A for "Alice"
 	And the user joined event is received from A for "Alice"
+
 	Given a websocket connection B is established
 	When a register request is sent to B for "Bob"
 	Then the registered event is received from B for "Bob"
 	And the user joined event is received from A for "Bob"
 	And the user joined event is received from B for "Bob"
+
+	When websocket connection B is closed
+	Then the user left event is received from A for "Bob"
