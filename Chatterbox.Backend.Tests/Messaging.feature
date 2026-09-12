@@ -18,7 +18,34 @@ Scenario: A registered user can send a message to another registered user
 	When a send message request is sent to A for "Bob" with the message "Hello, Bob!"
 	Then the message event is received from B with the message "Hello, Bob!" from "Alice"
 
-# TODO: Test for the message event not being received by any other users.
+Scenario: A message is not delivered to non-target users or unregistered users
+	Given the cloud formation stack is deployed
+
+	And a websocket connection A is established
+	And a websocket connection B is established
+	And a websocket connection C is established
+	And a websocket connection D is established
+
+	When a register request is sent to A for "Alice"
+	Then the registered event is received from A for "Alice"
+	And the user joined event is received from A for "Alice"
+
+	When a register request is sent to B for "Bob"
+	Then the registered event is received from B for "Bob"
+	And the user joined event is received from A for "Bob"
+	And the user joined event is received from B for "Bob"
+
+	When a register request is sent to C for "Charlie"
+	Then the registered event is received from C for "Charlie"
+	And the user joined event is received from A for "Charlie"
+	And the user joined event is received from B for "Charlie"
+	And the user joined event is received from C for "Charlie"
+
+	When a send message request is sent to A for "Bob" with the message "Hello, Bob!"
+	# Non-Bob does not receive the message event
+	Then no response is received from C
+	# Unregistered connection does not receive the message event
+	Then no response is received from D
 
 # TODO: Test for the message event not being accepted from unregistered users.
 
