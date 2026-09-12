@@ -1,3 +1,4 @@
+using Amazon;
 using Amazon.CloudFormation;
 using AwesomeAssertions;
 using DotNet.Testcontainers.Builders;
@@ -10,14 +11,12 @@ using Testcontainers.Floci;
 namespace Chatterbox.Backend.Tests;
 
 [Binding]
-public class TestLifecycle
+public class TestLifecycle(FeatureContext featureContext)
 {
     private static FlociContainer _flociContainer = null!;
     private static AmazonCloudFormationClient _cfClient = null!;
     private static string _flociNetworkName = string.Empty;
-    private string _stackName = string.Empty;
-    private string? _webSocketApiId;
-    private string? _stageName;
+    private static string _stackName = string.Empty;
 
     [BeforeFeature]
     public static async Task BeforeFeature(FeatureContext featureContext)
@@ -28,11 +27,7 @@ public class TestLifecycle
         featureContext.Add("FlociServiceUrl", new Uri(_flociContainer.GetConnectionString()));
 
         _cfClient = CreateCloudFormationClient();
-    }
 
-    [BeforeScenario]
-    public async Task BeforeScenario(FeatureContext featureContext)
-    {
         var templateBody = LoadTemplateYaml();
 
         _stackName = await LambdaDeploymentHelper.DeployCloudFormation(_flociContainer, _cfClient, templateBody);
@@ -43,13 +38,13 @@ public class TestLifecycle
         var stacks = response.Stacks;
         stacks.Should().NotBeEmpty();
 
-        _webSocketApiId = stacks[0].Outputs.FirstOrDefault(o => o.OutputKey == "WebSocketApiId")?.OutputValue;
-        _webSocketApiId.Should().NotBeNullOrEmpty();
-        featureContext.Set(_webSocketApiId, "WebSocketApiId");
+        var webSocketApiId = stacks[0].Outputs.FirstOrDefault(o => o.OutputKey == "WebSocketApiId")?.OutputValue;
+        webSocketApiId.Should().NotBeNullOrEmpty();
+        featureContext.Set(webSocketApiId, "WebSocketApiId");
 
-        _stageName = stacks[0].Outputs.FirstOrDefault(o => o.OutputKey == "StageName")?.OutputValue;
-        _stageName.Should().NotBeNullOrEmpty();
-        featureContext.Set(_stageName, "StageName");
+        var stageName = stacks[0].Outputs.FirstOrDefault(o => o.OutputKey == "StageName")?.OutputValue;
+        stageName.Should().NotBeNullOrEmpty();
+        featureContext.Set(stageName, "StageName");
     }
 
     [AfterScenario]
@@ -60,24 +55,49 @@ public class TestLifecycle
             var webSockets = featureContext.Get<Dictionary<string, ClientWebSocket>>("WebSocketConnections");
             foreach (var clientWebSocket in webSockets.Values)
             {
-                if (clientWebSocket.State == WebSocketState.Open)
+                try
                 {
-                    await clientWebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Scenario complete", CancellationToken.None);
-                }
+                    if (clientWebSocket.State == WebSocketState.Open)
+                    {
+                        await clientWebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Scenario complete",
+                            CancellationToken.None);
+                    }
 
-                clientWebSocket.Dispose();
+                    clientWebSocket.Dispose();
+                }
+                catch (Exception)
+                {
+                    // ignored
+                }
             }
         }
 
-        if (!string.IsNullOrWhiteSpace(_stackName))
+        // Delete all items in the Dynamo table
+        var tableName = "chatterbox-connections-prod";
+        var dynamoClient = new Amazon.DynamoDBv2.AmazonDynamoDBClient(new Amazon.DynamoDBv2.AmazonDynamoDBConfig
         {
-            await LambdaDeploymentHelper.DeleteCloudFormation(_cfClient, _stackName);
+            RegionEndpoint = RegionEndpoint.USEast1,
+            AuthenticationRegion = "us-east-1",
+            ServiceURL = _flociContainer.GetConnectionString()
+        });
+        var scanResponse = await dynamoClient.ScanAsync(new Amazon.DynamoDBv2.Model.ScanRequest
+        {
+            TableName = tableName,
+            AttributesToGet = ["displayName"],
+        });
+        foreach (var item in scanResponse.Items)
+        {
+            var deleteRequest = new Amazon.DynamoDBv2.Model.DeleteItemRequest
+            {
+                TableName = tableName,
+                Key = new Dictionary<string, Amazon.DynamoDBv2.Model.AttributeValue>
+                {
+                    { "displayName", item["displayName"] }
+                }
+            };
+            await dynamoClient.DeleteItemAsync(deleteRequest);
         }
-    }
 
-    [AfterScenario]
-    public void AfterScenarioCleanup(FeatureContext featureContext)
-    {
         featureContext.Remove("WebSocketConnections");
         featureContext.Remove("ClientWebSocket");
     }
@@ -93,8 +113,10 @@ public class TestLifecycle
     public void GivenTheCloudFormationStackIsDeployed()
     {
         _cfClient.Should().NotBeNull();
-        _webSocketApiId.Should().NotBeNullOrEmpty();
-        _stageName.Should().NotBeNullOrEmpty();
+        var webSocketApiId = featureContext.Get<string>("WebSocketApiId");
+        webSocketApiId.Should().NotBeNullOrEmpty();
+        var stageName = featureContext.Get<string>("StageName");
+        stageName.Should().NotBeNullOrEmpty();
     }
 
     private static async Task StartFlociContainer()
