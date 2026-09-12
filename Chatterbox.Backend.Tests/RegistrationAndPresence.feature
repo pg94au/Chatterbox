@@ -7,6 +7,7 @@ Scenario: Cannot connect to list empty room without registering
 	When a list users request is sent to A
 	Then no response is received from A
 
+
 Scenario: First user can register to an empty chatroom
 	Given the cloud formation stack is deployed
 	And a websocket connection A is established
@@ -17,6 +18,7 @@ Scenario: First user can register to an empty chatroom
 	Then the returned list of users from A includes
 		| DisplayName |
 		| Alice       |
+
 
 Scenario: Existing users are notified when a user joins or leaves
 	Given the cloud formation stack is deployed
@@ -34,6 +36,7 @@ Scenario: Existing users are notified when a user joins or leaves
 	When websocket connection B is closed
 	Then the user left event is received from A for "Bob"
 
+
 Scenario: An unregistered user does not observe other users joining or leaving
 	Given the cloud formation stack is deployed
 	And a websocket connection A is established
@@ -46,6 +49,7 @@ Scenario: An unregistered user does not observe other users joining or leaving
 	When websocket connection B is closed
 	# No response from either the registration or the disconnection goes to A
 	Then no response is received from A
+
 
 Scenario: When a user re-registers to a new connection, the old connection is kicked
 	Given the cloud formation stack is deployed

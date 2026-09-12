@@ -18,6 +18,7 @@ Scenario: A registered user can send a message to another registered user
 	When a send message request is sent to A for "Bob" with the message "Hello, Bob!"
 	Then the message event is received from B with the message "Hello, Bob!" from "Alice"
 
+
 Scenario: A message is not delivered to non-target users or unregistered users
 	Given the cloud formation stack is deployed
 
@@ -47,6 +48,7 @@ Scenario: A message is not delivered to non-target users or unregistered users
 	# Unregistered connection does not receive the message event
 	Then no response is received from D
 
+
 Scenario: Messages are not accepted from unregistered users
 	Given the cloud formation stack is deployed
 
@@ -61,6 +63,7 @@ Scenario: Messages are not accepted from unregistered users
 	Then an error event is received from B with reason "sender_not_registered"
 	Then no response is received from A
 
+
 Scenario: Messages are not accepted for users that are not online
 	Given the cloud formation stack is deployed
 	And a websocket connection A is established
@@ -68,6 +71,28 @@ Scenario: Messages are not accepted for users that are not online
 	When a register request is sent to A for "Alice"
 	Then the registered event is received from A for "Alice"
 	And the user joined event is received from A for "Alice"
+
+	When a send message request is sent to A for "Bob" with the message "Hello, Bob!"
+	Then an error event is received from A with reason "user_not_online"
+
+
+Scenario: Messages are not accepted for users that are no longer online
+	Given the cloud formation stack is deployed
+
+	And a websocket connection A is established
+	And a websocket connection B is established
+
+	When a register request is sent to A for "Alice"
+	Then the registered event is received from A for "Alice"
+	And the user joined event is received from A for "Alice"
+
+	When a register request is sent to B for "Bob"
+	Then the registered event is received from B for "Bob"
+	And the user joined event is received from A for "Bob"
+	And the user joined event is received from B for "Bob"
+
+	When websocket connection B is closed
+	Then the user left event is received from A for "Bob"
 
 	When a send message request is sent to A for "Bob" with the message "Hello, Bob!"
 	Then an error event is received from A with reason "user_not_online"
