@@ -50,15 +50,6 @@ public class TestLifecycle
         _stageName = stacks[0].Outputs.FirstOrDefault(o => o.OutputKey == "StageName")?.OutputValue;
         _stageName.Should().NotBeNullOrEmpty();
         featureContext.Set(_stageName, "StageName");
-
-        var defaultWebSocket = new ClientWebSocket();
-        var webSockets = new Dictionary<string, ClientWebSocket>
-        {
-            ["default"] = defaultWebSocket
-        };
-
-        featureContext.Set(webSockets, "WebSocketConnections");
-        featureContext.Set(defaultWebSocket, "ClientWebSocket");
     }
 
     [AfterScenario]
