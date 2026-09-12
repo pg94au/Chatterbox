@@ -4,6 +4,7 @@ using AwesomeAssertions;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Configurations;
 using DotNet.Testcontainers.Containers;
+using NUnit.Framework;
 using Reqnroll;
 using System.Net.WebSockets;
 using Testcontainers.Floci;
@@ -24,20 +25,20 @@ public class TestLifecycle(FeatureContext featureContext)
     [BeforeTestRun]
     public static async Task BeforeFeature()
     {
-        Console.WriteLine("Starting Floci container");
+        TestContext.Progress.Info("Starting Floci container");
         await StartFlociContainer();
 
-        Console.WriteLine($"Floci at: {_flociContainer.GetConnectionString()}");
+        TestContext.Progress.Info($"Floci at: {_flociContainer.GetConnectionString()}");
         _flociServiceUrl = new Uri(_flociContainer.GetConnectionString());
 
         _cfClient = CreateCloudFormationClient();
 
         var templateBody = LoadTemplateYaml();
 
-        Console.WriteLine("Deploying Cloudformation stack");
+        TestContext.Progress.Info("Deploying Cloudformation stack");
         _stackName = await LambdaDeploymentHelper.DeployCloudFormation(_flociContainer, _cfClient, templateBody);
 
-        Console.WriteLine($"Deployed stack: {_stackName}");
+        TestContext.Progress.Info($"Deployed stack: {_stackName}");
 
         var response = await _cfClient.DescribeStacksAsync();
         var stacks = response.Stacks;

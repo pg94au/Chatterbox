@@ -121,7 +121,7 @@ public class LambdaDeploymentHelper
 
         var packagePath = await LambdaDeploymentHelper.CreateLambdaPackage();
 
-        Console.WriteLine("Uploading artifact...");
+        TestContext.Progress.Info("Uploading artifact...");
         await LambdaDeploymentHelper.UploadArtifactAsync(bucketName, bucketKey, packagePath, flociContainer.GetConnectionString());
 
         var stackName = $"test-stack-{Guid.NewGuid():N}"; // Unique name per test run
@@ -131,7 +131,7 @@ public class LambdaDeploymentHelper
             Host = flociContainer.Name.Trim('/'), // Has '/' prefix?
             Port = 4566
         };
-        Console.WriteLine($"Floci inside URL: {flociInsideUrl}");
+        TestContext.Progress.Info($"Floci inside URL: {flociInsideUrl}");
 
         var createRequest = new CreateStackRequest
         {
@@ -242,7 +242,7 @@ public class LambdaDeploymentHelper
 
         foreach (var output in outputs)
         {
-            Console.WriteLine($"Output Key: {output.OutputKey}, Value: {output.OutputValue}");
+            TestContext.Progress.Info($"Output Key: {output.OutputKey}, Value: {output.OutputValue}");
         }
     }
 

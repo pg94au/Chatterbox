@@ -1,4 +1,5 @@
 ﻿using AwesomeAssertions;
+using NUnit.Framework;
 using Reqnroll;
 using System.Net.WebSockets;
 using static System.Net.Mime.MediaTypeNames;
@@ -17,7 +18,7 @@ public class BackendSteps(FeatureContext featureContext)
         var stageName = featureContext.Get<string>("StageName");
 
         var webSocketEndpoint = $"ws://{flociServiceUrl.Host}:{flociServiceUrl.Port}/ws/{webSocketApiId}/{stageName}";
-        Console.WriteLine($"Connecting websocket '{websocketName}' to endpoint: {webSocketEndpoint}");
+        TestContext.Progress.Info($"Connecting websocket '{websocketName}' to endpoint: {webSocketEndpoint}");
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await webSocket.ConnectAsync(new Uri(webSocketEndpoint), cts.Token);
