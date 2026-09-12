@@ -24,6 +24,7 @@ public class TestLifecycle(FeatureContext featureContext)
     [BeforeTestRun]
     public static async Task BeforeFeature()
     {
+        Console.WriteLine("Starting Floci container");
         await StartFlociContainer();
 
         Console.WriteLine($"Floci at: {_flociContainer.GetConnectionString()}");
@@ -33,6 +34,7 @@ public class TestLifecycle(FeatureContext featureContext)
 
         var templateBody = LoadTemplateYaml();
 
+        Console.WriteLine("Deploying Cloudformation stack");
         _stackName = await LambdaDeploymentHelper.DeployCloudFormation(_flociContainer, _cfClient, templateBody);
 
         Console.WriteLine($"Deployed stack: {_stackName}");
