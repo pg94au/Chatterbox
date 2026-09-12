@@ -2,6 +2,7 @@ using Amazon.CloudFormation;
 using AwesomeAssertions;
 using DotNet.Testcontainers.Builders;
 using DotNet.Testcontainers.Configurations;
+using DotNet.Testcontainers.Containers;
 using Reqnroll;
 using System.Net.WebSockets;
 using Testcontainers.Floci;
@@ -107,6 +108,8 @@ public class TestLifecycle
 
     private static async Task StartFlociContainer()
     {
+        var sessionId = ResourceReaper.DefaultSessionId;
+
         _flociNetworkName = $"floci_network-{Guid.NewGuid():N}";
 
         var network = new NetworkBuilder()
@@ -121,6 +124,8 @@ public class TestLifecycle
             .WithBindMount("/var/run/docker.sock", "/var/run/docker.sock", AccessMode.ReadWrite)
             .WithPortBinding(4566, true)
             .WithEnvironment("LOG_LEVEL", "DEBUG")
+            .WithEnvironment("FLOCI_DOCKER_EXTRA_LABELS_0__KEY", "org.testcontainers.resource-reaper-session")
+            .WithEnvironment("FLOCI_DOCKER_EXTRA_LABELS_0__VALUE", sessionId.ToString())
             .WithWaitStrategy(
                 Wait.ForUnixContainer()
                     .UntilHttpRequestIsSucceeded(request =>
