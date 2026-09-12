@@ -61,4 +61,13 @@ Scenario: Messages are not accepted from unregistered users
 	Then an error event is received from B with reason "sender_not_registered"
 	Then no response is received from A
 
-# TODO: Test for the message event not being delivered to users that are not online.
+Scenario: Messages are not accepted for users that are not online
+	Given the cloud formation stack is deployed
+	And a websocket connection A is established
+
+	When a register request is sent to A for "Alice"
+	Then the registered event is received from A for "Alice"
+	And the user joined event is received from A for "Alice"
+
+	When a send message request is sent to A for "Bob" with the message "Hello, Bob!"
+	Then an error event is received from A with reason "user_not_online"
