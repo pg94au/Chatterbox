@@ -17,14 +17,17 @@ public class TestLifecycle(FeatureContext featureContext)
     private static AmazonCloudFormationClient _cfClient = null!;
     private static string _flociNetworkName = string.Empty;
     private static string _stackName = string.Empty;
+    private static Uri? _flociServiceUrl;
+    private static string? _webSocketApiId;
+    private static string? _stageName;
 
-    [BeforeFeature]
-    public static async Task BeforeFeature(FeatureContext featureContext)
+    [BeforeTestRun]
+    public static async Task BeforeFeature()
     {
         await StartFlociContainer();
 
         Console.WriteLine($"Floci at: {_flociContainer.GetConnectionString()}");
-        featureContext.Add("FlociServiceUrl", new Uri(_flociContainer.GetConnectionString()));
+        _flociServiceUrl = new Uri(_flociContainer.GetConnectionString());
 
         _cfClient = CreateCloudFormationClient();
 
@@ -40,15 +43,23 @@ public class TestLifecycle(FeatureContext featureContext)
 
         var webSocketApiId = stacks[0].Outputs.FirstOrDefault(o => o.OutputKey == "WebSocketApiId")?.OutputValue;
         webSocketApiId.Should().NotBeNullOrEmpty();
-        featureContext.Set(webSocketApiId, "WebSocketApiId");
+        _webSocketApiId = webSocketApiId;
 
         var stageName = stacks[0].Outputs.FirstOrDefault(o => o.OutputKey == "StageName")?.OutputValue;
         stageName.Should().NotBeNullOrEmpty();
-        featureContext.Set(stageName, "StageName");
+        _stageName = stageName;
+    }
+
+    [BeforeFeature]
+    public static void BeforeFeature(FeatureContext featureContext)
+    {
+        featureContext.Add("FlociServiceUrl", _flociServiceUrl);
+        featureContext.Add("WebSocketApiId", _webSocketApiId);
+        featureContext.Add("StageName", _stageName);
     }
 
     [AfterScenario]
-    public async Task AfterScenario(FeatureContext featureContext)
+    public async Task AfterScenario()
     {
         if (featureContext.ContainsKey("WebSocketConnections"))
         {
@@ -102,7 +113,7 @@ public class TestLifecycle(FeatureContext featureContext)
         featureContext.Remove("ClientWebSocket");
     }
 
-    [AfterFeature]
+    [AfterTestRun]
     public static async Task AfterFeature()
     {
         await _flociContainer.StopAsync();
