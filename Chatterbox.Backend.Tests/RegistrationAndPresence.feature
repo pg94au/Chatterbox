@@ -47,4 +47,16 @@ Scenario: An unregistered user does not observe other users joining or leaving
 	# No response from either the registration or the disconnection goes to A
 	Then no response is received from A
 
-# TODO: Test for the kicked event when a user is replaced with a re-registration.
+Scenario: When a user re-registers to a new connection, the old connection is kicked
+	Given the cloud formation stack is deployed
+	And a websocket connection A is established
+	And a websocket connection B is established
+
+	When a register request is sent to A for "Alice"
+	Then the registered event is received from A for "Alice"
+	And the user joined event is received from A for "Alice"
+
+	When a register request is sent to B for "Alice"
+	Then the registered event is received from B for "Alice"
+
+	And the kicked event is received from A

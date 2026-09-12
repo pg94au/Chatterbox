@@ -73,6 +73,16 @@ public class BackendSteps(FeatureContext featureContext)
         registeredEvent.DisplayName.Should().Be(displayName);
     }
 
+    [Then("the kicked event is received from (.+)")]
+    public void ThenTheKickedEventIsReceivedFrom(string websocketName)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+        var kickedEvent = ReceiveMessage<KickedEvent>(websocketName, cts.Token).Result;
+        kickedEvent.Should().NotBeNull();
+        kickedEvent!.Type.Should().Be("kicked");
+    }
+
+
     [When(@"a list users request is sent to (.+)")]
     public async Task WhenAListUsersRequestIsSentTo(string websocketName)
     {
