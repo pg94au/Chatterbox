@@ -1,6 +1,7 @@
 ﻿using AwesomeAssertions;
 using Reqnroll;
 using System.Net.WebSockets;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace Chatterbox.Backend.Tests;
 
@@ -134,6 +135,19 @@ public class BackendSteps(FeatureContext featureContext)
         messageEvent.Text.Should().Be(text);
         messageEvent.From.Should().Be(from);
     }
+
+    [Then("an error event is received from (.+) with reason \"(.*)\"")]
+    public async Task ThenAnErrorEventIsReceivedFromBWithReason(string websocketName, string reason)
+    {
+        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+
+        var errorEvent = await ReceiveMessage<ErrorEvent>(websocketName, cts.Token);
+        errorEvent.Should().NotBeNull();
+        errorEvent!.Type.Should().Be("error");
+
+        errorEvent.Error.Should().Be(reason);
+    }
+
 
     [Then("no response is received from (.+)")]
     public async Task ThenNoResponseIsReceivedFrom(string websocketName)

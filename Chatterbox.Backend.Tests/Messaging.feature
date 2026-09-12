@@ -47,6 +47,18 @@ Scenario: A message is not delivered to non-target users or unregistered users
 	# Unregistered connection does not receive the message event
 	Then no response is received from D
 
-# TODO: Test for the message event not being accepted from unregistered users.
+Scenario: Messages are not accepted from unregistered users
+	Given the cloud formation stack is deployed
+
+	And a websocket connection A is established
+	And a websocket connection B is established
+
+	When a register request is sent to A for "Alice"
+	Then the registered event is received from A for "Alice"
+	And the user joined event is received from A for "Alice"
+
+	When a send message request is sent to B for "Alice" with the message "Hello, Alice!"
+	Then an error event is received from B with reason "sender_not_registered"
+	Then no response is received from A
 
 # TODO: Test for the message event not being delivered to users that are not online.
