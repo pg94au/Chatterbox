@@ -72,3 +72,18 @@ Scenario: When a user re-registers to a new connection, the old connection is ki
 	Then the registered event is received from B for "Alice"
 
 	And the kicked event is received from A
+
+
+Scenario: Cannot register a second time on the same connection
+	Given the cloud formation stack is deployed
+	And a websocket connection A is established
+	When a register request is sent to A for "Alice"
+
+	Then the registered event is received from A for "Alice"
+	And the user joined event is received from A for "Alice"
+
+	When a register request is sent to A for "Alice"
+	Then an error event is received from A with reason "already_registered"
+
+	When a register request is sent to A for "Bob"
+	Then an error event is received from A with reason "already_registered"
