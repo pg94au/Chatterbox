@@ -2,7 +2,6 @@
 using NUnit.Framework;
 using Reqnroll;
 using System.Net.WebSockets;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace Chatterbox.Backend.Tests;
 

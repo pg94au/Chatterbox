@@ -8,6 +8,14 @@ Scenario: Cannot connect to list empty room without registering
 	Then no response is received from A
 
 
+Scenario: Cannot register with a blank display name
+	Given the cloud formation stack is deployed
+	And a websocket connection A is established
+	
+	When a register request is sent to A for ""
+	Then an error event is received from A with reason "displayName_required"
+
+
 Scenario: First user can register to an empty chatroom
 	Given the cloud formation stack is deployed
 	And a websocket connection A is established
