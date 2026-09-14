@@ -11,7 +11,7 @@ public class BackendSteps(FeatureContext featureContext)
     [Given(@"a websocket connection (.+) is established")]
     public async Task AWebsocketConnectionIsEstablished(string websocketName)
     {
-        var webSocket = GetWebSocketConnection(websocketName);
+        var webSocket = featureContext.GetWebSocketConnection(websocketName);
         var flociServiceUrl = featureContext.Get<Uri>("FlociServiceUrl");
         var webSocketApiId = featureContext.Get<string>("WebSocketApiId");
         var stageName = featureContext.Get<string>("StageName");
@@ -27,7 +27,7 @@ public class BackendSteps(FeatureContext featureContext)
     [When("websocket connection (.+) is closed")]
     public void WhenWebsocketConnectionIsClosed(string websocketName)
     {
-        var webSocket = GetWebSocketConnection(websocketName);
+        var webSocket = featureContext.GetWebSocketConnection(websocketName);
         if (webSocket.State == WebSocketState.Open)
         {
             webSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, $"Closing connection {websocketName}", CancellationToken.None).Wait();
@@ -38,7 +38,7 @@ public class BackendSteps(FeatureContext featureContext)
     [When("a register request is sent to (.+) for \"(.*)\"")]
     public async Task WhenARegisterRequestIsSentTo(string websocketName, string displayName)
     {
-        var webSocket = GetWebSocketConnection(websocketName);
+        var webSocket = featureContext.GetWebSocketConnection(websocketName);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await webSocket.SendMessageAsync(new RegisterRequest(displayName), cts.Token);
@@ -87,7 +87,7 @@ public class BackendSteps(FeatureContext featureContext)
     [When(@"a list users request is sent to (.+)")]
     public async Task WhenAListUsersRequestIsSentTo(string websocketName)
     {
-        var webSocket = GetWebSocketConnection(websocketName);
+        var webSocket = featureContext.GetWebSocketConnection(websocketName);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await webSocket.SendMessageAsync(new ListUsersRequest(), cts.Token);
@@ -117,7 +117,7 @@ public class BackendSteps(FeatureContext featureContext)
     [When("a send message request is sent to (.+) for \"(.+)\" with the message \"(.*)\"")]
     public async Task WhenASendMessageRequestIsSentToAForWithTheMessage(string websocketName, string receipientName, string text)
     {
-        var webSocket = GetWebSocketConnection(websocketName);
+        var webSocket = featureContext.GetWebSocketConnection(websocketName);
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         await webSocket.SendMessageAsync(new MessageRequest(receipientName, text), cts.Token);
@@ -152,32 +152,15 @@ public class BackendSteps(FeatureContext featureContext)
     [Then("no response is received from (.+)")]
     public async Task ThenNoResponseIsReceivedFrom(string websocketName)
     {
-        var webSocket = GetWebSocketConnection(websocketName);
+        var webSocket = featureContext.GetWebSocketConnection(websocketName);
 
         await webSocket.NothingReceived(TimeSpan.FromSeconds(3));
     }
 
 
-    private ClientWebSocket GetWebSocketConnection(string websocketName)
-    {
-        var webSockets = featureContext.ContainsKey("WebSocketConnections")
-            ? featureContext.Get<Dictionary<string, ClientWebSocket>>("WebSocketConnections")
-            : new Dictionary<string, ClientWebSocket>();
-
-        if (webSockets.TryGetValue(websocketName, out var existingWebSocket))
-        {
-            return existingWebSocket;
-        }
-
-        var newWebSocket = new ClientWebSocket();
-        webSockets[websocketName] = newWebSocket;
-        featureContext.Set(webSockets, "WebSocketConnections");
-        return newWebSocket;
-    }
-
     private async Task<T> ReceiveMessage<T>(string websocketName, CancellationToken cancellationToken) where T : class
     {
-        var webSocket = GetWebSocketConnection(websocketName);
+        var webSocket = featureContext.GetWebSocketConnection(websocketName);
 
         var message = await webSocket.ReceiveMessage<T>(cancellationToken);
         message.Should().NotBeNull();
