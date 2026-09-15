@@ -1,11 +1,24 @@
 Feature: Registering users to the chatroom and listing users in the chatroom
 
-Scenario: Cannot connect to list empty room without registering
+Scenario: Cannot list empty room without registering
 	Given the cloud formation stack is deployed
 	And a websocket connection A is established
 	
 	When a list users request is sent to A
 	Then no response is received from A
+
+
+Scenario: Cannot list users without registering
+	Given the cloud formation stack is deployed
+	And a websocket connection A is established
+	
+	When a register request is sent to A for "Alice"
+	Then the registered event is received from A for "Alice"
+	And the user joined event is received from A for "Alice"
+
+	Given a websocket connection B is established
+	When a list users request is sent to B
+	Then no response is received from B
 
 
 Scenario: Cannot register with a blank display name
@@ -16,7 +29,7 @@ Scenario: Cannot register with a blank display name
 	Then an error event is received from A with reason "displayName_required"
 
 
-Scenario: First user can register to an empty chatroom
+Scenario: First user can register to an empty chatroom and list self
 	Given the cloud formation stack is deployed
 	And a websocket connection A is established
 	When a register request is sent to A for "Alice"

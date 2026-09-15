@@ -1,5 +1,17 @@
 Feature: The ability for registered users to send messages to each other
 
+Scenario: A register user can send message to self
+	Given the cloud formation stack is deployed
+	And a websocket connection A is established
+
+	When a register request is sent to A for "Alice"
+	Then the registered event is received from A for "Alice"
+	And the user joined event is received from A for "Alice"
+
+	When a send message request is sent to A for "Alice" with the message "Hello, Alice!"
+	Then the message event is received from A with the message "Hello, Alice!" from "Alice"
+
+
 Scenario: A registered user can send a message to another registered user
 	Given the cloud formation stack is deployed
 
