@@ -55,7 +55,7 @@ public class TestLifecycle(FeatureContext featureContext)
     [BeforeFeature]
     public static void BeforeFeature(FeatureContext featureContext)
     {
-        featureContext.Add("FlociServiceUrl", _flociServiceUrl);
+        featureContext.SetServiceUrl(_flociServiceUrl);
         featureContext.Add("WebSocketApiId", _webSocketApiId);
         featureContext.Add("StageName", _stageName);
     }
@@ -63,7 +63,7 @@ public class TestLifecycle(FeatureContext featureContext)
     [AfterScenario]
     public async Task AfterScenario()
     {
-        await featureContext.DisposeWebSocketConnections();
+        await featureContext.CleanupWebSocketConnections();
 
         // Delete all items in the Dynamo table
         var tableName = "chatterbox-connections-prod";
@@ -90,9 +90,6 @@ public class TestLifecycle(FeatureContext featureContext)
             };
             await dynamoClient.DeleteItemAsync(deleteRequest);
         }
-
-        featureContext.Remove("WebSocketConnections");
-        featureContext.Remove("ClientWebSocket");
     }
 
     [AfterTestRun]

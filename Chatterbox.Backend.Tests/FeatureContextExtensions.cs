@@ -5,7 +5,18 @@ namespace Chatterbox.Backend.Tests;
 
 public static class FeatureContextExtensions
 {
+    private const string ServiceUrl = "ServiceUrl";
     private const string WebSocketConnectionsKey = "WebSocketConnections";
+
+    public static Uri GetServiceUrl(this FeatureContext featureContext)
+    {
+        return featureContext.Get<Uri>(ServiceUrl);
+    }
+
+    public static void SetServiceUrl(this FeatureContext featureContext, Uri value)
+    {
+        featureContext.Add(ServiceUrl, value);
+    }
 
     public static ClientWebSocket GetWebSocketConnection(this FeatureContext featureContext, string websocketName)
     {
@@ -25,7 +36,7 @@ public static class FeatureContextExtensions
         return newWebSocket;
     }
 
-    public static async Task DisposeWebSocketConnections(this FeatureContext featureContext)
+    public static async Task CleanupWebSocketConnections(this FeatureContext featureContext)
     {
         if (featureContext.ContainsKey(WebSocketConnectionsKey))
         {
@@ -51,5 +62,7 @@ public static class FeatureContextExtensions
                 }
             }
         }
+
+        featureContext.Remove(WebSocketConnectionsKey);
     }
 }

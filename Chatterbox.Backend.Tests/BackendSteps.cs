@@ -12,7 +12,7 @@ public class BackendSteps(FeatureContext featureContext)
     public async Task AWebsocketConnectionIsEstablished(string websocketName)
     {
         var webSocket = featureContext.GetWebSocketConnection(websocketName);
-        var flociServiceUrl = featureContext.Get<Uri>("FlociServiceUrl");
+        var flociServiceUrl = featureContext.GetServiceUrl();
         var webSocketApiId = featureContext.Get<string>("WebSocketApiId");
         var stageName = featureContext.Get<string>("StageName");
 
