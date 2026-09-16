@@ -6,7 +6,6 @@ using DotNet.Testcontainers.Configurations;
 using DotNet.Testcontainers.Containers;
 using NUnit.Framework;
 using Reqnroll;
-using System.Net.WebSockets;
 using Testcontainers.Floci;
 
 namespace Chatterbox.Backend.Tests;
@@ -64,27 +63,7 @@ public class TestLifecycle(FeatureContext featureContext)
     [AfterScenario]
     public async Task AfterScenario()
     {
-        if (featureContext.ContainsKey("WebSocketConnections"))
-        {
-            var webSockets = featureContext.Get<Dictionary<string, ClientWebSocket>>("WebSocketConnections");
-            foreach (var clientWebSocket in webSockets.Values)
-            {
-                try
-                {
-                    if (clientWebSocket.State == WebSocketState.Open)
-                    {
-                        await clientWebSocket.CloseAsync(WebSocketCloseStatus.NormalClosure, "Scenario complete",
-                            CancellationToken.None);
-                    }
-
-                    clientWebSocket.Dispose();
-                }
-                catch (Exception)
-                {
-                    // ignored
-                }
-            }
-        }
+        await featureContext.DisposeWebSocketConnections();
 
         // Delete all items in the Dynamo table
         var tableName = "chatterbox-connections-prod";

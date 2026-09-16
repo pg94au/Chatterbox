@@ -24,4 +24,32 @@ public static class FeatureContextExtensions
 
         return newWebSocket;
     }
+
+    public static async Task DisposeWebSocketConnections(this FeatureContext featureContext)
+    {
+        if (featureContext.ContainsKey(WebSocketConnectionsKey))
+        {
+            var webSockets = featureContext.Get<Dictionary<string, ClientWebSocket>>(WebSocketConnectionsKey);
+            foreach (var clientWebSocket in webSockets.Values)
+            {
+                try
+                {
+                    if (clientWebSocket.State == WebSocketState.Open)
+                    {
+                        await clientWebSocket.CloseAsync(
+                            WebSocketCloseStatus.NormalClosure,
+                            "Scenario complete",
+                            CancellationToken.None
+                        );
+                    }
+
+                    clientWebSocket.Dispose();
+                }
+                catch (Exception)
+                {
+                    // ignored
+                }
+            }
+        }
+    }
 }
