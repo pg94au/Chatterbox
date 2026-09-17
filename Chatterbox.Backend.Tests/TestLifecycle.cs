@@ -22,7 +22,7 @@ public class TestLifecycle(FeatureContext featureContext)
     private static string? _stageName;
 
     [BeforeTestRun]
-    public static async Task BeforeFeature()
+    public static async Task BeforeTestRun()
     {
         TestContext.Progress.Info("Starting Floci container");
         await StartFlociContainer();
@@ -93,7 +93,7 @@ public class TestLifecycle(FeatureContext featureContext)
     }
 
     [AfterTestRun]
-    public static async Task AfterFeature()
+    public static async Task AfterTestRun()
     {
         await _flociContainer.StopAsync();
         await _flociContainer.DisposeAsync();
