@@ -44,7 +44,7 @@ public class BackendSteps(FeatureContext featureContext)
         await webSocket.SendMessageAsync(new RegisterRequest(displayName), cts.Token);
     }
 
-    [Then("the user joined event is received from (.+) for \"(.*)\"")]
+    [Then("a user joined event is received from (.+) for \"(.*)\"")]
     public async Task ThenTheUserJoinedEventIsReceivedFrom(string websocketName, string displayName)
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
@@ -64,7 +64,7 @@ public class BackendSteps(FeatureContext featureContext)
         userLeftEvent.DisplayName.Should().Be(displayName);
     }
 
-    [Then("the registered event is received from (.+) for \"(.*)\"")]
+    [Then("a registered event is received from (.+) for \"(.*)\"")]
     public async Task ThenTheRegisteredEventIsReceivedFrom(string websocketName, string displayName)
     {
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
