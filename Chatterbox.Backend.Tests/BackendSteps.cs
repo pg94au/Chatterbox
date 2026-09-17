@@ -12,9 +12,9 @@ public class BackendSteps(FeatureContext featureContext)
     public async Task AWebsocketConnectionIsEstablished(string websocketName)
     {
         var webSocket = featureContext.GetWebSocketConnection(websocketName);
-        var flociServiceUrl = featureContext.GetServiceUrl();
-        var webSocketApiId = featureContext.Get<string>("WebSocketApiId");
-        var stageName = featureContext.Get<string>("StageName");
+        var flociServiceUrl = featureContext.ServiceUrl;
+        var webSocketApiId = featureContext.WebSocketApiId;
+        var stageName = featureContext.StageName;
 
         var webSocketEndpoint = $"ws://{flociServiceUrl.Host}:{flociServiceUrl.Port}/ws/{webSocketApiId}/{stageName}";
         TestContext.Progress.Info($"Connecting websocket '{websocketName}' to endpoint: {webSocketEndpoint}");

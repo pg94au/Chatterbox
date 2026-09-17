@@ -55,9 +55,9 @@ public class TestLifecycle(FeatureContext featureContext)
     [BeforeFeature]
     public static void BeforeFeature(FeatureContext featureContext)
     {
-        featureContext.SetServiceUrl(_flociServiceUrl);
-        featureContext.Add("WebSocketApiId", _webSocketApiId);
-        featureContext.Add("StageName", _stageName);
+        featureContext.ServiceUrl = _flociServiceUrl!;
+        featureContext.WebSocketApiId = _webSocketApiId!;
+        featureContext.StageName = _stageName!;
     }
 
     [AfterScenario]
@@ -103,9 +103,9 @@ public class TestLifecycle(FeatureContext featureContext)
     public void GivenTheCloudFormationStackIsDeployed()
     {
         _cfClient.Should().NotBeNull();
-        var webSocketApiId = featureContext.Get<string>("WebSocketApiId");
+        var webSocketApiId = featureContext.WebSocketApiId;
         webSocketApiId.Should().NotBeNullOrEmpty();
-        var stageName = featureContext.Get<string>("StageName");
+        var stageName = featureContext.StageName;
         stageName.Should().NotBeNullOrEmpty();
     }
 

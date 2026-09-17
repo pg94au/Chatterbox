@@ -6,16 +6,29 @@ namespace Chatterbox.Backend.Tests;
 public static class FeatureContextExtensions
 {
     private const string ServiceUrl = "ServiceUrl";
+    private const string WebSocketApiId = "WebSocketApiId";
+    private const string StageName = "StageName";
     private const string WebSocketConnectionsKey = "WebSocketConnections";
 
-    public static Uri GetServiceUrl(this FeatureContext featureContext)
+    extension(FeatureContext featureContext)
     {
-        return featureContext.Get<Uri>(ServiceUrl);
-    }
+        public Uri ServiceUrl
+        {
+            get => featureContext.Get<Uri>(ServiceUrl);
+            set => featureContext.Add(ServiceUrl, value);
+        }
 
-    public static void SetServiceUrl(this FeatureContext featureContext, Uri value)
-    {
-        featureContext.Add(ServiceUrl, value);
+        public string WebSocketApiId
+        {
+            get => featureContext.Get<string>(WebSocketApiId);
+            set => featureContext.Add(WebSocketApiId, value);
+        }
+
+        public string StageName
+        {
+            get => featureContext.Get<string>(StageName);
+            set => featureContext.Add(StageName, value);
+        }
     }
 
     public static ClientWebSocket GetWebSocketConnection(this FeatureContext featureContext, string websocketName)
