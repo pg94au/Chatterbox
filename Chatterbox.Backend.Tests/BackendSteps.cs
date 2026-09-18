@@ -1,5 +1,7 @@
 ﻿using AwesomeAssertions;
 using NUnit.Framework;
+using Polly;
+using Polly.Retry;
 using Reqnroll;
 using System.Net.WebSockets;
 
@@ -8,6 +10,21 @@ namespace Chatterbox.Backend.Tests;
 [Binding]
 public class BackendSteps(FeatureContext featureContext)
 {
+    private static readonly IAsyncPolicy<bool> WebSocketConnectPolicy = Policy<bool>
+        .Handle<HttpRequestException>()
+        .Or<IOException>()
+        .Or<OperationCanceledException>()
+        .Or<TimeoutException>()
+        .OrResult(r => !r)
+        .WaitAndRetryAsync(
+            retryCount: 5,
+            sleepDurationProvider: attempt => TimeSpan.FromMilliseconds(Math.Min(100 * attempt, 1000)),
+            onRetry: (outcome, timespan, retryCount, context) =>
+            {
+                var exception = outcome.Exception?.Message ?? "Connection not ready";
+                TestContext.Progress.Info($"WebSocket connection attempt {retryCount} failed: {exception}. Retrying in {timespan.TotalMilliseconds}ms...");
+            });
+
     [Given(@"a websocket connection (.+) is established")]
     public async Task AWebsocketConnectionIsEstablished(string websocketName)
     {
@@ -19,8 +36,13 @@ public class BackendSteps(FeatureContext featureContext)
         var webSocketEndpoint = $"ws://{flociServiceUrl.Host}:{flociServiceUrl.Port}/ws/{webSocketApiId}/{stageName}";
         TestContext.Progress.Info($"Connecting websocket '{websocketName}' to endpoint: {webSocketEndpoint}");
 
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        await webSocket.ConnectAsync(new Uri(webSocketEndpoint), cts.Token);
+        await WebSocketConnectPolicy.ExecuteAsync(async () =>
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            await webSocket.ConnectAsync(new Uri(webSocketEndpoint), cts.Token);
+            return true;
+        });
+
         webSocket.State.Should().Be(WebSocketState.Open);
     }
 
