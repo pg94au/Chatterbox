@@ -6,5 +6,8 @@
     <File Path="README-CLOUDFORMATION.md" />
     <File Path="template.yaml" />
   </Folder>
+  <Folder Name="/Solution Items/">
+    <File Path=".github/workflows/build-and-test.yml" />
+  </Folder>
   <Project Path="Chatterbox.Backend.Tests/Chatterbox.Backend.Tests.csproj" />
 </Solution>
