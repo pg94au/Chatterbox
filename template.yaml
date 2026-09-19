@@ -36,6 +36,27 @@ Parameters:
     Description: 'Override URL for the API Gateway management API endpoint'
     Default: ''
 
+  EnableCustomDomain:
+    Type: String
+    Description: 'Set to true to create the custom domain + ACM mapping (not supported by Floci emulator)'
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+
+  CustomDomainName:
+    Type: String
+    Description: 'Custom domain name for the WebSocket API (e.g., api.example.com). Required when EnableCustomDomain=true.'
+    Default: ''
+
+  CertificateArn:
+    Type: String
+    Description: 'ARN of the ACM certificate for the custom domain. Required when EnableCustomDomain=true.'
+    Default: ''
+
+Conditions:
+  CreateCustomDomain: !Equals [!Ref EnableCustomDomain, 'true']
+
 Resources:
   # DynamoDB Table for connection tracking
   ConnectionsTable:
@@ -111,6 +132,7 @@ Resources:
               - execute-api:ManageConnections
             Resource:
               - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/${StageName}/POST/@connections/*'
+              - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/${StageName}/POST/${StageName}/@connections/*'
 
   # Lambda Function
   WebSocketHandler:
@@ -231,6 +253,35 @@ Resources:
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/*/*'
 
+  # ---------------------------------------------------------------------------
+  # Custom Domain (only created when EnableCustomDomain=true)
+  # Not supported by the Floci emulator.
+  # ---------------------------------------------------------------------------
+
+  # Custom Domain Name for the WebSocket API
+  CustomDomain:
+    Type: AWS::ApiGatewayV2::DomainName
+    Condition: CreateCustomDomain
+    Properties:
+      DomainName: !Ref CustomDomainName
+      DomainNameConfigurations:
+        - CertificateArn: !Ref CertificateArn
+          EndpointType: REGIONAL
+          SecurityPolicy: TLS_1_2
+      Tags:
+        Application: Chatterbox
+        Environment: !Ref StageName
+
+  # Map the API stage to the custom domain
+  ApiMapping:
+    Type: AWS::ApiGatewayV2::ApiMapping
+    Condition: CreateCustomDomain
+    Properties:
+      ApiId: !Ref WebSocketApi
+      DomainName: !Ref CustomDomain
+      Stage: !Ref WebSocketStage
+      ApiMappingKey: ''
+
 Outputs:
   WebSocketApiId:
     Description: WebSocket API ID
@@ -249,6 +300,28 @@ Outputs:
     Value: !Sub 'wss://${WebSocketApi}.execute-api.${AWS::Region}.amazonaws.com/${StageName}'
     Export:
       Name: !Sub '${AWS::StackName}-WebSocketEndpoint'
+
+  CustomDomainWebSocketEndpoint:
+    Description: 'Custom Domain WebSocket endpoint URL (only when EnableCustomDomain=true)'
+    Condition: CreateCustomDomain
+    Value: !Sub 'wss://${CustomDomainName}/${StageName}'
+    Export:
+      Name: !Sub '${AWS::StackName}-CustomDomainWebSocketEndpoint'
+
+  # These two outputs are what you use to configure DNS at your non-Route53 provider
+  CustomDomainTargetDomainName:
+    Description: 'DNS target for your custom domain CNAME record (use this at your DNS provider)'
+    Condition: CreateCustomDomain
+    Value: !GetAtt CustomDomain.RegionalDomainName
+    Export:
+      Name: !Sub '${AWS::StackName}-CustomDomainTargetDomainName'
+
+  CustomDomainTargetHostedZoneId:
+    Description: 'Target hosted zone ID (for DNS providers that support ALIAS records at the apex)'
+    Condition: CreateCustomDomain
+    Value: !GetAtt CustomDomain.RegionalHostedZoneId
+    Export:
+      Name: !Sub '${AWS::StackName}-CustomDomainTargetHostedZoneId'
 
   LambdaFunctionArn:
     Description: Lambda function ARN

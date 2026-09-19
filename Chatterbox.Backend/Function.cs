@@ -248,9 +248,23 @@ public class Functions
             ? null
             : new Uri(awsServiceUrlValue);
 
-        var endpoint = awsServiceUrl == null
-            ? $"https://{request.RequestContext.DomainName}/{request.RequestContext.Stage}"
-            : $"{awsServiceUrl}/execute-api/{apiId}/{stage}";
+        string endpoint;
+
+        if (awsServiceUrl is not null)
+        {
+            endpoint = $"{awsServiceUrl}/execute-api/{apiId}/{stage}";
+        }
+        else
+        {
+            endpoint = $"https://{request.RequestContext.DomainName}";
+
+            // If the domain name contains ".execute-api.", then we need to append the stage to the endpoint.
+            // (If it is a custom domain, the stage is already included in the domain name.)
+            if (request.RequestContext.DomainName.Contains(".execute-api.", StringComparison.OrdinalIgnoreCase))
+            {
+                endpoint += $"/{stage}";
+            }
+        }
 
         var config = new AmazonApiGatewayManagementApiConfig
         {
