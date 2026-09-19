@@ -55,7 +55,7 @@ public static class ClientWebSocketExtensions
 
             received.Should().NotBeNull("did not expect to receive message before timeout specified");
         }
-        catch (TaskCanceledException e) when (timeoutCts.IsCancellationRequested)
+        catch (TaskCanceledException) when (timeoutCts.IsCancellationRequested)
         {
             // Expected timeout
         }
