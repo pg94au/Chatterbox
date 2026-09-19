@@ -31,6 +31,31 @@ public static class FeatureContextExtensions
         }
     }
 
+    public static ClientWebSocket CreateWebSocketConnection(this FeatureContext featureContext, string websocketName)
+    {
+        var webSockets = featureContext.ContainsKey(WebSocketConnectionsKey)
+            ? featureContext.Get<Dictionary<string, ClientWebSocket>>(WebSocketConnectionsKey)
+            : new Dictionary<string, ClientWebSocket>();
+
+        if (webSockets.TryGetValue(websocketName, out var existingWebSocket))
+        {
+            try
+            {
+                existingWebSocket.Dispose();
+            }
+            catch
+            {
+                // Ignore
+            }
+        }
+
+        var newWebSocket = new ClientWebSocket();
+        webSockets[websocketName] = newWebSocket;
+        featureContext.Set(webSockets, WebSocketConnectionsKey);
+
+        return newWebSocket;
+    }
+
     public static ClientWebSocket GetWebSocketConnection(this FeatureContext featureContext, string websocketName)
     {
         var webSockets = featureContext.ContainsKey(WebSocketConnectionsKey)

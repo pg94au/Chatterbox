@@ -1,7 +1,6 @@
 ﻿using AwesomeAssertions;
 using NUnit.Framework;
 using Polly;
-using Polly.Retry;
 using Reqnroll;
 using System.Net.WebSockets;
 
@@ -28,7 +27,6 @@ public class BackendSteps(FeatureContext featureContext)
     [Given(@"a websocket connection (.+) is established")]
     public async Task AWebsocketConnectionIsEstablished(string websocketName)
     {
-        var webSocket = featureContext.GetWebSocketConnection(websocketName);
         var flociServiceUrl = featureContext.ServiceUrl;
         var webSocketApiId = featureContext.WebSocketApiId;
         var stageName = featureContext.StageName;
@@ -36,13 +34,16 @@ public class BackendSteps(FeatureContext featureContext)
         var webSocketEndpoint = $"ws://{flociServiceUrl.Host}:{flociServiceUrl.Port}/ws/{webSocketApiId}/{stageName}";
         TestContext.Progress.Info($"Connecting websocket '{websocketName}' to endpoint: {webSocketEndpoint}");
 
+        ClientWebSocket? webSocket = null;
         await WebSocketConnectPolicy.ExecuteAsync(async () =>
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+            webSocket = featureContext.CreateWebSocketConnection(websocketName);
             await webSocket.ConnectAsync(new Uri(webSocketEndpoint), cts.Token);
             return true;
         });
 
+        webSocket.Should().NotBeNull();
         webSocket.State.Should().Be(WebSocketState.Open);
     }
 
