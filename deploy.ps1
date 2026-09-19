@@ -15,7 +15,17 @@ param(
 	[string]$AwsServiceUrl = "",
 
 	[Parameter(Mandatory=$false)]
-	[string]$AwsInternalServiceUrl = ""
+	[string]$AwsInternalServiceUrl = "",
+
+	[Parameter(Mandatory=$false)]
+	[ValidateSet("true", "false")]
+	[string]$EnableCustomDomain = "false",
+
+	[Parameter(Mandatory=$false)]
+	[string]$CustomDomainName = "",
+
+	[Parameter(Mandatory=$false)]
+	[string]$CertificateArn = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -40,6 +50,10 @@ if ($AwsServiceUrl) {
 }
 if ($AwsInternalServiceUrl) {
 	Write-Host "AWS Internal Service Url: $AwsInternalServiceUrl" -ForegroundColor Yellow
+}
+if ($EnableCustomDomain -eq "true") {
+	Write-Host "Custom Domain: $CustomDomainName" -ForegroundColor Yellow
+	Write-Host "Certificate ARN: $CertificateArn" -ForegroundColor Yellow
 }
 Write-Host ""
 
@@ -180,12 +194,21 @@ Write-Host "  ✓ Uploaded to s3://$S3Bucket/$s3Key" -ForegroundColor Gray
 
 # Step 6: Deploy CloudFormation
 Write-Host "[6/6] Deploying CloudFormation stack..." -ForegroundColor Green
+if ($EnableCustomDomain -eq "true") {
+	if ([string]::IsNullOrWhiteSpace($CustomDomainName) -or [string]::IsNullOrWhiteSpace($CertificateArn)) {
+		throw "EnableCustomDomain=true requires both -CustomDomainName and -CertificateArn to be provided."
+	}
+}
+
 $parameterOverrides = @(
 	"Environment=$Environment",
 	"TableName=$TableName",
 	"LambdaCodeBucket=$S3Bucket",
 	"LambdaCodeKey=$s3Key",
-	"StageName=$StageName"
+	"StageName=$StageName",
+	"EnableCustomDomain=$EnableCustomDomain",
+	"CustomDomainName=$CustomDomainName",
+	"CertificateArn=$CertificateArn"
 )
 
 if ($AwsInternalServiceUrl) {
@@ -227,29 +250,34 @@ Write-Host "=== Deployment Complete ===" -ForegroundColor Cyan
 # Get outputs
 Write-Host ""
 Write-Host "Stack Outputs:" -ForegroundColor Yellow
-$endpoint = aws cloudformation describe-stacks `
-	--stack-name $StackName `
-	--query 'Stacks[0].Outputs[?OutputKey==`WebSocketEndpoint`].OutputValue' `
-	--output text `
-	--region $Region
+
+$describeArgs = @(
+	'cloudformation', 'describe-stacks',
+	'--stack-name', $StackName,
+	'--output', 'json',
+	'--region', $Region
+)
 
 if ($AwsServiceUrl) {
-	$endpointArgs = @('--endpoint-url', $AwsServiceUrl)
-	$endpoint = & aws cloudformation describe-stacks `
-		--stack-name $StackName `
-		--query 'Stacks[0].Outputs[?OutputKey==`WebSocketEndpoint`].OutputValue' `
-		--output text `
-		--region $Region `
-		@endpointArgs
-} else {
-	$endpoint = & aws cloudformation describe-stacks `
-		--stack-name $StackName `
-		--query 'Stacks[0].Outputs[?OutputKey==`WebSocketEndpoint`].OutputValue' `
-		--output text `
-		--region $Region
+	$describeArgs += @('--endpoint-url', $AwsServiceUrl)
 }
 
+$stackDescription = & aws @describeArgs
+if ($LASTEXITCODE -ne 0) {
+	throw "Failed to query CloudFormation stack outputs"
+}
+
+$stackOutputs = $stackDescription | ConvertFrom-Json
+$endpoint = ($stackOutputs.Stacks[0].Outputs | Where-Object { $_.OutputKey -eq 'WebSocketEndpoint' }).OutputValue
+$customDomainEndpoint = ($stackOutputs.Stacks[0].Outputs | Where-Object { $_.OutputKey -eq 'CustomDomainWebSocketEndpoint' }).OutputValue
+
 Write-Host "WebSocket Endpoint: $endpoint" -ForegroundColor Green
+if (-not [string]::IsNullOrWhiteSpace($customDomainEndpoint)) {
+	Write-Host "Custom Domain WebSocket Endpoint: $customDomainEndpoint" -ForegroundColor Green
+}
 Write-Host ""
 Write-Host "Connect to your WebSocket:" -ForegroundColor Cyan
 Write-Host "  $endpoint" -ForegroundColor White
+if (-not [string]::IsNullOrWhiteSpace($customDomainEndpoint)) {
+	Write-Host "  $customDomainEndpoint" -ForegroundColor White
+}
