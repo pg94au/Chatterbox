@@ -1,0 +1,146 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Chatterbox web app deployed to S3 and CloudFront'
+
+Parameters:
+  Environment:
+    Type: String
+    Default: prod
+    AllowedValues:
+      - dev
+      - staging
+      - prod
+
+  BucketName:
+    Type: String
+    Description: 'S3 bucket that will host the static web app'
+    MinLength: 3
+
+  DomainName:
+    Type: String
+    Description: 'Optional custom domain name for the app (for example: app.example.com)'
+    Default: ''
+
+  CertificateArn:
+    Type: String
+    Description: 'Optional ACM certificate ARN for the custom domain'
+    Default: ''
+
+  DefaultRootObject:
+    Type: String
+    Default: index.html
+
+Conditions:
+  HasCustomDomain: !Not
+    - !Equals
+      - !Ref DomainName
+      - ''
+
+  HasCertificate: !Not
+    - !Equals
+      - !Ref CertificateArn
+      - ''
+
+  EnableCustomDomain: !And
+    - !Condition HasCustomDomain
+    - !Condition HasCertificate
+
+Resources:
+  CloudFrontOriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${AWS::StackName}-oac'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+        Description: !Sub 'OAC for ${BucketName}'
+
+  CloudFrontDistribution:
+    Type: AWS::CloudFront::Distribution
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: !Sub 'Chatterbox ${Environment}'
+        DefaultRootObject: !Ref DefaultRootObject
+        HttpVersion: http2and3
+        IPV6Enabled: true
+        Aliases: !If
+          - EnableCustomDomain
+          - - !Ref DomainName
+          - !Ref AWS::NoValue
+        ViewerCertificate: !If
+          - EnableCustomDomain
+          - AcmCertificateArn: !Ref CertificateArn
+            MinimumProtocolVersion: TLSv1.2_2021
+            SslSupportMethod: sni-only
+          - CloudFrontDefaultCertificate: true
+        Origins:
+          - Id: S3Origin
+            DomainName: !Sub '${BucketName}.s3.${AWS::Region}.amazonaws.com'
+            OriginAccessControlId: !Ref CloudFrontOriginAccessControl
+            S3OriginConfig:
+              OriginAccessIdentity: ''
+        DefaultCacheBehavior:
+          TargetOriginId: S3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          AllowedMethods:
+            - GET
+            - HEAD
+            - OPTIONS
+          CachedMethods:
+            - GET
+            - HEAD
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+          MinTTL: 0
+          DefaultTTL: 3600
+          MaxTTL: 86400
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 0
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 0
+
+  WebsiteBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref BucketName
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: AllowCloudFrontOAC
+            Effect: Allow
+            Principal:
+              Service: cloudfront.amazonaws.com
+            Action: s3:GetObject
+            Resource: !Sub 'arn:aws:s3:::${BucketName}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${CloudFrontDistribution}'
+
+Outputs:
+  BucketName:
+    Description: S3 bucket hosting the static site
+    Value: !Ref BucketName
+
+  DistributionId:
+    Description: CloudFront distribution ID
+    Value: !Ref CloudFrontDistribution
+
+  CloudFrontUrl:
+    Description: CloudFront distribution hostname
+    Value: !Sub 'https://${CloudFrontDistribution.DomainName}'
+
+  WebsiteUrl:
+    Description: Public website URL
+    Value: !If
+      - EnableCustomDomain
+      - !Sub 'https://${DomainName}'
+      - !Sub 'https://${CloudFrontDistribution.DomainName}'
