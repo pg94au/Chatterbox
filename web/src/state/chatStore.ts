@@ -10,6 +10,7 @@ interface ChatState {
   users: UserPresence[]
   selectedUser: string | null
   conversations: Record<string, ChatEntry[]>
+  unreadByUser: Record<string, number>
   lastError: string | null
   kickedReason: string | null
   reconnectAttempt: number
@@ -23,6 +24,8 @@ interface ChatState {
   removeUser: (displayName: string) => void
   selectUser: (displayName: string | null) => void
   addMessage: (message: ChatEntry) => void
+  incrementUnread: (displayName: string) => void
+  clearUnread: (displayName: string) => void
   setError: (error: string | null) => void
   setKicked: (reason: string | null) => void
   setReconnectAttempt: (attempt: number) => void
@@ -48,6 +51,7 @@ export const useChatStore = create<ChatState>((set) => ({
   users: [],
   selectedUser: null,
   conversations: {},
+  unreadByUser: {},
   lastError: null,
   kickedReason: null,
   reconnectAttempt: 0,
@@ -71,10 +75,22 @@ export const useChatStore = create<ChatState>((set) => ({
       const users = state.users.filter((u) => u.displayName !== displayName)
       const selectedUser =
         state.selectedUser === displayName ? null : state.selectedUser
+      const unreadByUser = { ...state.unreadByUser }
+      delete unreadByUser[displayName]
 
-      return { users, selectedUser }
+      return { users, selectedUser, unreadByUser }
     }),
-  selectUser: (selectedUser) => set({ selectedUser }),
+  selectUser: (selectedUser) =>
+    set((state) => {
+      if (!selectedUser) {
+        return { selectedUser }
+      }
+
+      const unreadByUser = { ...state.unreadByUser }
+      delete unreadByUser[selectedUser]
+
+      return { selectedUser, unreadByUser }
+    }),
   addMessage: (message) =>
     set((state) => {
       const key =
@@ -91,6 +107,24 @@ export const useChatStore = create<ChatState>((set) => ({
         },
       }
     }),
+  incrementUnread: (displayName) =>
+    set((state) => ({
+      unreadByUser: {
+        ...state.unreadByUser,
+        [displayName]: (state.unreadByUser[displayName] ?? 0) + 1,
+      },
+    })),
+  clearUnread: (displayName) =>
+    set((state) => {
+      if (!(displayName in state.unreadByUser)) {
+        return state
+      }
+
+      const unreadByUser = { ...state.unreadByUser }
+      delete unreadByUser[displayName]
+
+      return { unreadByUser }
+    }),
   setError: (lastError) => set({ lastError }),
   setKicked: (kickedReason) => set({ kickedReason }),
   setReconnectAttempt: (reconnectAttempt) => set({ reconnectAttempt }),
@@ -100,6 +134,7 @@ export const useChatStore = create<ChatState>((set) => ({
       registered: false,
       users: [],
       selectedUser: null,
+      unreadByUser: {},
       reconnectAttempt: 0,
     }),
 }))

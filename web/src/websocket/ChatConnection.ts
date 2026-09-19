@@ -224,6 +224,7 @@ class ChatConnection {
       case 'message': {
         const messageEvent = event as MessageEvent
         const displayName = state.displayName
+        const selectedUser = state.selectedUser
 
         if (
           isEchoOfOutgoingSelfMessage(messageEvent, displayName) &&
@@ -242,6 +243,13 @@ class ChatConnection {
         }
 
         state.addMessage(incoming)
+
+        if (selectedUser !== messageEvent.from) {
+          state.incrementUnread(messageEvent.from)
+        } else {
+          state.clearUnread(messageEvent.from)
+        }
+
         break
       }
       case 'error': {

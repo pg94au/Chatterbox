@@ -4,6 +4,7 @@ interface SidebarProps {
   users: UserPresence[]
   currentUser: string
   selectedUser: string | null
+  unreadByUser: Record<string, number>
   onSelectUser: (displayName: string) => void
   onRefreshUsers: () => void
 }
@@ -12,6 +13,7 @@ export function Sidebar({
   users,
   currentUser,
   selectedUser,
+  unreadByUser,
   onSelectUser,
   onRefreshUsers,
 }: SidebarProps) {
@@ -32,14 +34,19 @@ export function Sidebar({
         <ul className="user-list">
           {onlineUsers.map((user) => {
             const isSelected = selectedUser === user.displayName
+            const unreadCount = unreadByUser[user.displayName] ?? 0
+            const hasUnread = unreadCount > 0 && !isSelected
             return (
               <li key={user.displayName}>
                 <button
                   type="button"
-                  className={isSelected ? 'user-row selected' : 'user-row'}
+                  className={`user-row${isSelected ? ' selected' : ''}${hasUnread ? ' unread' : ''}`}
                   onClick={() => onSelectUser(user.displayName)}
                 >
-                  <strong>{user.displayName}</strong>
+                  <div className="user-row-title">
+                    <strong>{user.displayName}</strong>
+                    {hasUnread ? <span className="unread-badge">{unreadCount}</span> : null}
+                  </div>
                   <small>
                     online since {new Date(user.connectedAt).toLocaleTimeString()}
                   </small>

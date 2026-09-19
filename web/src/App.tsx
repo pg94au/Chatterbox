@@ -14,6 +14,7 @@ function App() {
   const users = useChatStore((state) => state.users)
   const selectedUser = useChatStore((state) => state.selectedUser)
   const conversations = useChatStore((state) => state.conversations)
+  const unreadByUser = useChatStore((state) => state.unreadByUser)
   const error = useChatStore((state) => state.lastError)
   const reconnectAttempt = useChatStore((state) => state.reconnectAttempt)
   const registered = useChatStore((state) => state.registered)
@@ -67,6 +68,7 @@ function App() {
           users={users}
           currentUser={displayName}
           selectedUser={selectedUser}
+          unreadByUser={unreadByUser}
           onSelectUser={setSelectedUser}
           onRefreshUsers={handleRefreshUsers}
         />

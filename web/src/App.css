@@ -117,6 +117,13 @@
   gap: 0.25rem;
 }
 
+.user-row-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
 .user-row strong {
   color: #172232;
 }
@@ -128,6 +135,27 @@
 .user-row.selected {
   border-color: #2e4560;
   background: #e6edf7;
+}
+
+.user-row.unread {
+  border-color: #c56a17;
+  background: #fff3e6;
+  box-shadow: inset 0 0 0 1px rgba(197, 106, 23, 0.22);
+}
+
+.unread-badge {
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: #c56a17;
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .chat-window {
