@@ -16,7 +16,7 @@ public class BackendSteps(FeatureContext featureContext)
         .Or<TimeoutException>()
         .OrResult(r => !r)
         .WaitAndRetryAsync(
-            retryCount: 5,
+            retryCount: 15,
             sleepDurationProvider: attempt => TimeSpan.FromMilliseconds(Math.Min(100 * attempt, 1000)),
             onRetry: (outcome, timespan, retryCount, context) =>
             {
@@ -37,7 +37,7 @@ public class BackendSteps(FeatureContext featureContext)
         ClientWebSocket? webSocket = null;
         await WebSocketConnectPolicy.ExecuteAsync(async () =>
         {
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+            using var cts = new CancellationTokenSource(TimeSpan.FromMilliseconds(500));
             webSocket = featureContext.CreateWebSocketConnection(websocketName);
             await webSocket.ConnectAsync(new Uri(webSocketEndpoint), cts.Token);
             return true;
