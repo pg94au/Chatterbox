@@ -12,6 +12,8 @@ namespace Chatterbox.Backend;
 
 public class Functions
 {
+    private const string AgentDisplayName = "Agent";
+
     private readonly ConnectionsStore _connectionsStore;
     private readonly ILogger<Functions> _logger;
 
@@ -88,7 +90,18 @@ public class Functions
 
             return;
         }
-        _logger.LogTrace("Registering user with display name {DisplayName} for connection {ConnectionId}", body.DisplayName, connectionId);
+
+        // Trying to register as the AI agent?
+        if (string.Equals(body.DisplayName, AgentDisplayName, StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning("Register request received with reserved display name {DisplayName} for connection {ConnectionId}", body.DisplayName, connectionId);
+            await SendToConnection(
+                apiClient,
+                connectionId,
+                new ErrorEvent("displayName_reserved")
+            );
+            return;
+        }
 
         // Is this connection already registered?
         var existingConnection = await _connectionsStore.FindByConnectionIdAsync(connectionId);
@@ -103,6 +116,8 @@ public class Functions
 
             return;
         }
+
+        _logger.LogTrace("Registering user with display name {DisplayName} for connection {ConnectionId}", body.DisplayName, connectionId);
 
         // Does this display name already exist?
         var existingName = await _connectionsStore.LoadByDisplayNameAsync(body.DisplayName);
@@ -181,6 +196,14 @@ public class Functions
 
         var users = await _connectionsStore.GetAllAsync();
 
+        // AI agent should always show up as a user in the list (joined since 2001).
+        users.Add(new PresenceRecord
+        {
+            DisplayName = AgentDisplayName,
+            ConnectionId = string.Empty,
+            ConnectedAt = new DateTimeOffset(2001, 1, 1, 0, 0, 0, TimeSpan.Zero).ToUnixTimeMilliseconds()
+        });
+
         await SendToConnection(
             apiClient,
             request.RequestContext.ConnectionId,
@@ -216,6 +239,20 @@ public class Functions
             return;
         }
         _logger.LogTrace("Sender {Sender} is sending a message to {Recipient}", sender.DisplayName, body.To);
+
+        if (body.To == AgentDisplayName)
+        {
+            _logger.LogInformation("Auto-replying on behalf of currently non-existent AI agent.");
+            await SendToConnection(
+                apiClient,
+                senderConnectionId,
+                new MessageEvent(
+                    AgentDisplayName,
+                    $"I'm sorry, {sender.DisplayName}.  I'm afraid I can't do that."
+                )
+            );
+            return;
+        }
 
         var recipient = await _connectionsStore.LoadByDisplayNameAsync(body.To);
 

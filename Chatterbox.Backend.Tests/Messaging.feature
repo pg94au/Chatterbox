@@ -108,3 +108,15 @@ Scenario: Messages are not accepted for users that are no longer online
 
 	When a send message request is sent to A for "Bob" with the message "Hello, Bob!"
 	Then an error event is received from A with reason "user_not_online"
+
+
+Scenario: Message sent to the AI agent receive a fixed response
+	Given the cloud formation stack is deployed
+	And a websocket connection A is established
+
+	When a register request is sent to A for "Alice"
+	Then a registered event is received from A for "Alice"
+	And a user joined event is received from A for "Alice"
+
+	When a send message request is sent to A for "Agent" with the message "Hello, Agent!"
+	Then the message event is received from A with the message "I'm sorry, Alice.  I'm afraid I can't do that." from "Agent"

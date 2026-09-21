@@ -29,16 +29,54 @@ Scenario: Cannot register with a blank display name
 	Then an error event is received from A with reason "displayName_required"
 
 
-Scenario: First user can register to an empty chatroom and list self
+Scenario: Cannot register with the same display name as the AI agent
+	Given the cloud formation stack is deployed
+	And a websocket connection A is established
+
+	# Registration as the AI agent is not allowed
+	When a register request is sent to A for "Agent"
+	Then an error event is received from A with reason "displayName_reserved"
+
+	# Registration as the AI agent is not allowed, even with different casing
+	When a register request is sent to A for "agent"
+	Then an error event is received from A with reason "displayName_reserved"
+
+
+Scenario: First user can register to an empty chatroom and list users
 	Given the cloud formation stack is deployed
 	And a websocket connection A is established
 	When a register request is sent to A for "Alice"
 	Then a registered event is received from A for "Alice"
 	And a user joined event is received from A for "Alice"
 	When a list users request is sent to A
+	# The returned list of users from A includes the AI agent and Alice
 	Then the returned list of users from A includes
 		| DisplayName |
+		| Agent       |
 		| Alice       |
+
+
+Scenario: When multiple users are in the chat room, they can see each other in the list of users
+	Given the cloud formation stack is deployed
+	And a websocket connection A is established
+	And a websocket connection B is established
+
+	When a register request is sent to A for "Alice"
+	Then a registered event is received from A for "Alice"
+	And a user joined event is received from A for "Alice"
+
+	When a register request is sent to B for "Bob"
+	Then a registered event is received from B for "Bob"
+	And a user joined event is received from A for "Bob"
+	And a user joined event is received from B for "Bob"
+
+	When a list users request is sent to A
+	# The returned list of users from A includes the AI agent, Alice, and Bob
+	Then the returned list of users from A includes
+		| DisplayName |
+		| Agent       |
+		| Alice       |
+		| Bob         |
 
 
 Scenario: Existing users are notified when a user joins or leaves
