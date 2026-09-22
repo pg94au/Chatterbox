@@ -36,6 +36,19 @@ Parameters:
     Description: 'Override URL for the API Gateway management API endpoint'
     Default: ''
 
+  EnableDeepSeek:
+    Type: String
+    Description: 'Set to true to configure DeepSeek environment variables on the Lambda function.'
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+
+  DeepSeekApiKey:
+    Type: String
+    Description: 'DeepSeek API key. Required when EnableDeepSeek=true.'
+    Default: ''
+
   EnableCustomDomain:
     Type: String
     Description: 'Set to true to create the custom domain + ACM mapping (not supported by Floci emulator)'
@@ -55,6 +68,7 @@ Parameters:
     Default: ''
 
 Conditions:
+  UseDeepSeek: !Equals [!Ref EnableDeepSeek, 'true']
   CreateCustomDomain: !Equals [!Ref EnableCustomDomain, 'true']
 
 Resources:
@@ -151,6 +165,9 @@ Resources:
         Variables:
           CONNECTIONS_TABLE: !Ref ConnectionsTable
           AWS_SERVICE_URL: !Ref AwsServiceUrl
+          DEEPSEEK_BASE_URL: !If [UseDeepSeek, 'https://api.deepseek.com/v1', !Ref 'AWS::NoValue']
+          DEEPSEEK_API_KEY: !If [UseDeepSeek, !Ref DeepSeekApiKey, !Ref 'AWS::NoValue']
+          DEEPSEEK_MODEL: !If [UseDeepSeek, 'deepseek-chat', !Ref 'AWS::NoValue']
       Tags:
         - Key: Application
           Value: Chatterbox

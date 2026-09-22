@@ -15,11 +15,13 @@ public class Functions
     private const string AgentDisplayName = "Agent";
 
     private readonly ConnectionsStore _connectionsStore;
+    private readonly DeepSeekClient _deepSeekClient;
     private readonly ILogger<Functions> _logger;
 
-    public Functions(ConnectionsStore connectionsStore, ILogger<Functions> logger)
+    public Functions(ConnectionsStore connectionsStore, DeepSeekClient deepSeekClient, ILogger<Functions> logger)
     {
         _connectionsStore = connectionsStore;
+        _deepSeekClient = deepSeekClient;
         _logger = logger;
 
         _logger.LogInformation("Functions class initialized.");
@@ -242,13 +244,14 @@ public class Functions
 
         if (body.To == AgentDisplayName)
         {
-            _logger.LogInformation("Auto-replying on behalf of currently non-existent AI agent.");
+            _logger.LogInformation("Sending request to AI agent.");
+            var response = await _deepSeekClient.GetResponseFromAgentAsync(body.Text, sender.DisplayName);
             await SendToConnection(
                 apiClient,
                 senderConnectionId,
                 new MessageEvent(
                     AgentDisplayName,
-                    $"I'm sorry, {sender.DisplayName}.  I'm afraid I can't do that."
+                    response
                 )
             );
             return;

@@ -18,8 +18,13 @@ param(
 	[string]$AwsInternalServiceUrl = "",
 
 	[Parameter(Mandatory=$false)]
-	[ValidateSet("true", "false")]
-	[string]$EnableCustomDomain = "false",
+	[switch]$EnableDeepSeek,
+
+	[Parameter(Mandatory=$false)]
+	[string]$DeepSeekApiKey = "",
+
+	[Parameter(Mandatory=$false)]
+	[switch]$EnableCustomDomain,
 
 	[Parameter(Mandatory=$false)]
 	[string]$CustomDomainName = "",
@@ -51,7 +56,13 @@ if ($AwsServiceUrl) {
 if ($AwsInternalServiceUrl) {
 	Write-Host "AWS Internal Service Url: $AwsInternalServiceUrl" -ForegroundColor Yellow
 }
-if ($EnableCustomDomain -eq "true") {
+if ($EnableDeepSeek) {
+	Write-Host "DeepSeek Enabled: true" -ForegroundColor Yellow
+}
+else {
+	Write-Host "DeepSeek Enabled: false" -ForegroundColor Yellow
+}
+if ($EnableCustomDomain) {
 	Write-Host "Custom Domain: $CustomDomainName" -ForegroundColor Yellow
 	Write-Host "Certificate ARN: $CertificateArn" -ForegroundColor Yellow
 }
@@ -194,11 +205,19 @@ Write-Host "  ✓ Uploaded to s3://$S3Bucket/$s3Key" -ForegroundColor Gray
 
 # Step 6: Deploy CloudFormation
 Write-Host "[6/6] Deploying CloudFormation stack..." -ForegroundColor Green
-if ($EnableCustomDomain -eq "true") {
-	if ([string]::IsNullOrWhiteSpace($CustomDomainName) -or [string]::IsNullOrWhiteSpace($CertificateArn)) {
-		throw "EnableCustomDomain=true requires both -CustomDomainName and -CertificateArn to be provided."
+if ($EnableDeepSeek) {
+	if ([string]::IsNullOrWhiteSpace($DeepSeekApiKey)) {
+		throw "-EnableDeepSeek requires -DeepSeekApiKey to be provided."
 	}
 }
+if ($EnableCustomDomain) {
+	if ([string]::IsNullOrWhiteSpace($CustomDomainName) -or [string]::IsNullOrWhiteSpace($CertificateArn)) {
+		throw "-EnableCustomDomain requires both -CustomDomainName and -CertificateArn to be provided."
+	}
+}
+
+$enableDeepSeekValue = if ($EnableDeepSeek) { "true" } else { "false" }
+$enableCustomDomainValue = if ($EnableCustomDomain) { "true" } else { "false" }
 
 $parameterOverrides = @(
 	"Environment=$Environment",
@@ -206,10 +225,15 @@ $parameterOverrides = @(
 	"LambdaCodeBucket=$S3Bucket",
 	"LambdaCodeKey=$s3Key",
 	"StageName=$StageName",
-	"EnableCustomDomain=$EnableCustomDomain",
+	"EnableDeepSeek=$enableDeepSeekValue",
+	"EnableCustomDomain=$enableCustomDomainValue",
 	"CustomDomainName=$CustomDomainName",
 	"CertificateArn=$CertificateArn"
 )
+
+if ($EnableDeepSeek) {
+	$parameterOverrides += "DeepSeekApiKey=$DeepSeekApiKey"
+}
 
 if ($AwsInternalServiceUrl) {
 	$parameterOverrides += "AwsServiceUrl=$AwsInternalServiceUrl"
