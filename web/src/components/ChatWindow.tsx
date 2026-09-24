@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 
 import type { ChatEntry } from '../types/chat'
@@ -17,6 +17,7 @@ export function ChatWindow({
   onSendMessage,
 }: ChatWindowProps) {
   const [draft, setDraft] = useState('')
+  const messageListRef = useRef<HTMLDivElement>(null)
 
   const title = selectedUser
     ? `Chat with ${selectedUser}`
@@ -26,6 +27,13 @@ export function ChatWindow({
     () => [...conversation].sort((a, b) => a.timestamp - b.timestamp),
     [conversation],
   )
+
+  useEffect(() => {
+    const messageList = messageListRef.current
+    if (messageList) {
+      messageList.scrollTop = messageList.scrollHeight
+    }
+  }, [sortedConversation])
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -46,7 +54,7 @@ export function ChatWindow({
         {selectedUser ? <p>Signed in as {currentUser}</p> : null}
       </header>
 
-      <div className="message-list" role="log">
+      <div className="message-list" role="log" ref={messageListRef}>
         {selectedUser && sortedConversation.length === 0 ? (
           <p className="empty-state">No messages yet. Say hello.</p>
         ) : null}
