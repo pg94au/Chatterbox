@@ -101,6 +101,7 @@
   margin: 0;
   padding: 0;
   display: grid;
+  align-content: start;
   gap: 0.5rem;
   overflow: auto;
 }
