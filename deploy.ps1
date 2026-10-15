@@ -24,6 +24,15 @@ param(
 	[string]$DeepSeekApiKey = "",
 
 	[Parameter(Mandatory=$false)]
+	[string]$EmbeddingsBaseUrl = "",
+
+	[Parameter(Mandatory=$false)]
+	[string]$EmbeddingsApiKey = "",
+
+	[Parameter(Mandatory=$false)]
+	[string]$EmbeddingsModel = "",
+
+	[Parameter(Mandatory=$false)]
 	[switch]$EnableCustomDomain,
 
 	[Parameter(Mandatory=$false)]
@@ -42,6 +51,7 @@ $BackendRoot = Join-Path $RepoRoot "Chatterbox.Backend"
 $StackName = "chatterbox-$Environment"
 $StageName = $Environment
 $TableName = "chatterbox-connections-$Environment"
+$RagTableName = "chatterbox-rag-$Environment"
 
 Write-Host "=== Chatterbox Deployment ===" -ForegroundColor Cyan
 Write-Host "Environment: $Environment" -ForegroundColor Yellow
@@ -49,6 +59,7 @@ Write-Host "Stack: $StackName" -ForegroundColor Yellow
 Write-Host "S3 Bucket: $S3Bucket" -ForegroundColor Yellow
 Write-Host "Stage: $StageName" -ForegroundColor Yellow
 Write-Host "Table: $TableName" -ForegroundColor Yellow
+Write-Host "RAG Table: $RagTableName" -ForegroundColor Yellow
 Write-Host "Region: $Region" -ForegroundColor Yellow
 if ($AwsServiceUrl) {
 	Write-Host "AWS Service Url: $AwsServiceUrl" -ForegroundColor Yellow
@@ -222,6 +233,10 @@ $enableCustomDomainValue = if ($EnableCustomDomain) { "true" } else { "false" }
 $parameterOverrides = @(
 	"Environment=$Environment",
 	"TableName=$TableName",
+	"RagTableName=$RagTableName",
+	"EmbeddingsBaseUrl=$EmbeddingsBaseUrl",
+	"EmbeddingsApiKey=$EmbeddingsApiKey",
+	"EmbeddingsModel=$EmbeddingsModel",
 	"LambdaCodeBucket=$S3Bucket",
 	"LambdaCodeKey=$s3Key",
 	"StageName=$StageName",

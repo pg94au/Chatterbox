@@ -31,6 +31,26 @@ Parameters:
     Description: 'DynamoDB table name for connection tracking'
     Default: 'chatterbox-connections'
 
+  RagTableName:
+    Type: String
+    Description: 'DynamoDB table name for RAG chunks'
+    Default: 'chatterbox-rag'
+
+  EmbeddingsBaseUrl:
+    Type: String
+    Description: 'OpenAI-compatible embeddings endpoint base URL (for example https://api.openai.com/v1)'
+    Default: ''
+
+  EmbeddingsApiKey:
+    Type: String
+    Description: 'API key for the embeddings service.'
+    Default: ''
+
+  EmbeddingsModel:
+    Type: String
+    Description: 'Embedding model identifier.'
+    Default: ''
+
   AwsServiceUrl:
     Type: String
     Description: 'Override URL for the API Gateway management API endpoint'
@@ -99,6 +119,28 @@ Resources:
         - Key: Environment
           Value: !Ref StageName
 
+  # DynamoDB table for RAG chunk and embedding storage
+  RagChunksTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub '${RagTableName}-${StageName}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      Tags:
+        - Key: Application
+          Value: Chatterbox
+        - Key: Environment
+          Value: !Ref StageName
+
   # IAM Role for Lambda execution
   LambdaExecutionRole:
     Type: AWS::IAM::Role
@@ -141,6 +183,8 @@ Resources:
             Resource:
               - !GetAtt ConnectionsTable.Arn
               - !Sub '${ConnectionsTable.Arn}/index/*'
+              - !GetAtt RagChunksTable.Arn
+              - !Sub '${RagChunksTable.Arn}/index/*'
           - Effect: Allow
             Action:
               - execute-api:ManageConnections
@@ -164,6 +208,11 @@ Resources:
       Environment:
         Variables:
           CONNECTIONS_TABLE: !Ref ConnectionsTable
+          RAG_TABLE: !Ref RagChunksTable
+          RAG_TOP_K: '5'
+          EMBEDDINGS_BASE_URL: !Ref EmbeddingsBaseUrl
+          EMBEDDINGS_API_KEY: !Ref EmbeddingsApiKey
+          EMBEDDINGS_MODEL: !Ref EmbeddingsModel
           AWS_SERVICE_URL: !Ref AwsServiceUrl
           DEEPSEEK_BASE_URL: !If [UseDeepSeek, 'https://api.deepseek.com/v1', !Ref 'AWS::NoValue']
           DEEPSEEK_API_KEY: !If [UseDeepSeek, !Ref DeepSeekApiKey, !Ref 'AWS::NoValue']
@@ -357,6 +406,12 @@ Outputs:
     Value: !Ref ConnectionsTable
     Export:
       Name: !Sub '${AWS::StackName}-ConnectionsTableName'
+
+  RagTableName:
+    Description: DynamoDB RAG table name
+    Value: !Ref RagChunksTable
+    Export:
+      Name: !Sub '${AWS::StackName}-RagTableName'
 
   StageName:
     Description: API Gateway stage name

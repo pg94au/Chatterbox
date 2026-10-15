@@ -1,6 +1,7 @@
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DataModel;
 using Amazon.Lambda.Annotations;
+using Chatterbox.Rag;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -40,14 +41,45 @@ public class Startup
             });
         });
 
+        hostBuilder.Services.AddSingleton<IOptions<RagOptions>>(sp =>
+        {
+            var configuration = sp.GetRequiredService<IConfiguration>();
+            var topK = int.TryParse(configuration["RAG_TOP_K"], out var parsedTopK)
+                ? parsedTopK
+                : 5;
+
+            return Options.Create(new RagOptions
+            {
+                TableName = configuration["RAG_TABLE"] ?? string.Empty,
+                TopK = topK
+            });
+        });
+
+        hostBuilder.Services.AddSingleton<IOptions<EmbeddingOptions>>(sp =>
+        {
+            var configuration = sp.GetRequiredService<IConfiguration>();
+
+            return Options.Create(new EmbeddingOptions
+            {
+                BaseUrl = configuration["EMBEDDINGS_BASE_URL"] ?? string.Empty,
+                ApiKey = configuration["EMBEDDINGS_API_KEY"] ?? string.Empty,
+                Model = configuration["EMBEDDINGS_MODEL"] ?? string.Empty
+            });
+        });
+
         hostBuilder.Services.AddSingleton<IAmazonDynamoDB>(_ => new AmazonDynamoDBClient());
         hostBuilder.Services.AddSingleton<IDynamoDBContext>(sp =>
             new DynamoDBContextBuilder()
                 .WithDynamoDBClient(sp.GetRequiredService<IAmazonDynamoDB>)
                 .Build()
         );
+
         hostBuilder.Services.AddSingleton<ConnectionsStore>();
         hostBuilder.Services.AddSingleton<DeepSeekClient>();
+
+        hostBuilder.Services.AddSingleton<IEmbeddingGenerator, SemanticKernelEmbeddingGenerator>();
+        hostBuilder.Services.AddSingleton<IRagRepository, DynamoDbRagRepository>();
+        hostBuilder.Services.AddSingleton<RagRetrievalService>();
 
         return hostBuilder;
     }

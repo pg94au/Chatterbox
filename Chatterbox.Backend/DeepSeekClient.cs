@@ -28,9 +28,11 @@ public class DeepSeekClient
     /// </summary>
     /// <param name="request">The end-user message to send to the agent.</param>
     /// <param name="requesterName">The display name of the user who requested the response.</param>
+    /// <param name="retrievedContext">Optional retrieved context text to ground the response.</param>
     /// <returns>The agent response text, or a fallback response when unavailable.</returns>
-    public async Task<string> GetResponseFromAgentAsync(string request, string requesterName)
+    public async Task<string> GetResponseFromAgentAsync(string request, string requesterName, string? retrievedContext = null)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(request);
         ArgumentException.ThrowIfNullOrWhiteSpace(requesterName);
 
         _logger.LogInformation("Requesting response from DeepSeek for requester {RequesterName}", requesterName);
@@ -46,17 +48,27 @@ public class DeepSeekClient
         }
 
         var endpoint = _deepSeekOptions.BaseUrl.TrimEnd('/') + "/chat/completions";
+        var messages = new List<object>();
+
+        if (!string.IsNullOrWhiteSpace(retrievedContext))
+        {
+            messages.Add(new
+            {
+                role = "system",
+                content = $"You are a helpful assistant for a chatroom. Use the provided context when it is relevant.\n\n{retrievedContext}"
+            });
+        }
+
+        messages.Add(new
+        {
+            role = "user",
+            content = request
+        });
+
         var payload = new
         {
             model = _deepSeekOptions.Model,
-            messages = new[]
-            {
-                new
-                {
-                    role = "user",
-                    content = request
-                }
-            }
+            messages
         };
 
         try

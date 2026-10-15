@@ -1,0 +1,11 @@
+services:
+  ministack:
+    image: ministackorg/ministack:latest
+    container_name: ministack
+    ports:
+      - "4566:4566"
+    environment:
+      LAMBDA_EXECUTOR: docker
+      LOG_LEVEL: DEBUG
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
