@@ -1,7 +1,5 @@
 ﻿using Amazon;
 using Amazon.DynamoDBv2;
-using Chatterbox.Rag;
-using Chatterbox.Rag.Ingestion;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
