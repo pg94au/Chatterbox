@@ -43,7 +43,17 @@ public sealed class RagRetrievalService
             return (string.Empty, []);
         }
 
-        var queryEmbedding = await _embeddingGenerator.GenerateEmbeddingAsync(userPrompt, cancellationToken).ConfigureAwait(false);
+        float[] queryEmbedding;
+        try
+        {
+            queryEmbedding = await _embeddingGenerator.GenerateEmbeddingAsync(userPrompt, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to generate query embedding for retrieval.");
+            return (string.Empty, []);
+        }
+
         if (queryEmbedding.Length == 0)
         {
             return (string.Empty, []);

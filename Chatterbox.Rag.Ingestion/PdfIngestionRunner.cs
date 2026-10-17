@@ -1,4 +1,3 @@
-using Chatterbox.Rag;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Security.Cryptography;
@@ -84,12 +83,22 @@ public sealed class PdfIngestionRunner
                 foreach (var chunk in textChunks)
                 {
                     var chunkId = $"{documentId}-{chunkIndexOffset + chunk.ChunkIndex:D6}";
-                    var embedding = await _embeddings.GenerateEmbeddingAsync(chunk.Text, cancellationToken).ConfigureAwait(false);
+
+                    float[] embedding;
+                    try
+                    {
+                        embedding = await _embeddings.GenerateEmbeddingAsync(chunk.Text, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Embedding generation failed for {FileName} page {PageNumber} chunk {ChunkIndex}. Stopping ingestion.", fileName, page.PageNumber, chunk.ChunkIndex);
+                        return 1;
+                    }
 
                     if (embedding.Length == 0)
                     {
-                        _logger.LogWarning("Skipping chunk with empty embedding for {FileName} page {PageNumber} chunk {ChunkIndex}", fileName, page.PageNumber, chunk.ChunkIndex);
-                        continue;
+                        _logger.LogError("Embedding generation returned an empty vector for {FileName} page {PageNumber} chunk {ChunkIndex}. Stopping ingestion.", fileName, page.PageNumber, chunk.ChunkIndex);
+                        return 1;
                     }
 
                     chunks.Add(new RagChunk(

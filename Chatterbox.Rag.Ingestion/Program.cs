@@ -49,12 +49,14 @@ public static class Program
                 return new AmazonDynamoDBClient();
             }
 
-            return new AmazonDynamoDBClient(new AmazonDynamoDBConfig
+            var config = new AmazonDynamoDBConfig
             {
                 ServiceURL = serviceUrl,
-                AuthenticationRegion = "ca-central-1",
-                RegionEndpoint = RegionEndpoint.CACentral1
-            });
+                AuthenticationRegion = "us-east-1",
+                UseHttp = serviceUrl.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+            };
+
+            return new AmazonDynamoDBClient(config);
         });
 
         builder.Services.AddOptions<ChunkingOptions>()
@@ -66,27 +68,31 @@ public static class Program
 
         builder.Services.PostConfigure<RagOptions>(options =>
         {
-            if (string.IsNullOrWhiteSpace(options.TableName))
+            var ragTableOverride = builder.Configuration["RAG_TABLE"];
+            if (!string.IsNullOrWhiteSpace(ragTableOverride))
             {
-                options.TableName = builder.Configuration["RAG_TABLE"] ?? string.Empty;
+                options.TableName = ragTableOverride;
             }
         });
 
         builder.Services.PostConfigure<EmbeddingOptions>(options =>
         {
-            if (string.IsNullOrWhiteSpace(options.BaseUrl))
+            var embeddingsBaseUrlOverride = builder.Configuration["EMBEDDINGS_BASE_URL"];
+            if (!string.IsNullOrWhiteSpace(embeddingsBaseUrlOverride))
             {
-                options.BaseUrl = builder.Configuration["EMBEDDINGS_BASE_URL"] ?? string.Empty;
+                options.BaseUrl = embeddingsBaseUrlOverride;
             }
 
-            if (string.IsNullOrWhiteSpace(options.ApiKey))
+            var embeddingsApiKeyOverride = builder.Configuration["EMBEDDINGS_API_KEY"];
+            if (!string.IsNullOrWhiteSpace(embeddingsApiKeyOverride))
             {
-                options.ApiKey = builder.Configuration["EMBEDDINGS_API_KEY"] ?? string.Empty;
+                options.ApiKey = embeddingsApiKeyOverride;
             }
 
-            if (string.IsNullOrWhiteSpace(options.Model))
+            var embeddingsModelOverride = builder.Configuration["EMBEDDINGS_MODEL"];
+            if (!string.IsNullOrWhiteSpace(embeddingsModelOverride))
             {
-                options.Model = builder.Configuration["EMBEDDINGS_MODEL"] ?? string.Empty;
+                options.Model = embeddingsModelOverride;
             }
         });
 
@@ -97,13 +103,43 @@ public static class Program
 
         using var host = builder.Build();
 
+        var logger = host.Services.GetRequiredService<ILoggerFactory>().CreateLogger("IngestionStartup");
+        var configuration = host.Services.GetRequiredService<IConfiguration>();
+        var ragOptions = host.Services.GetRequiredService<IOptions<RagOptions>>().Value;
         var embeddingOptions = host.Services.GetRequiredService<IOptions<EmbeddingOptions>>().Value;
+
+        var awsServiceUrl = configuration["AWS_SERVICE_URL"];
+        var dynamoDbClient = host.Services.GetRequiredService<IAmazonDynamoDB>();
+        var clientConfig = (dynamoDbClient as AmazonDynamoDBClient)?.Config as AmazonDynamoDBConfig;
+
+        logger.LogInformation(
+            "Resolved configuration. AWS_SERVICE_URL={AwsServiceUrl}; RAG table={RagTable}; Embeddings base URL={EmbeddingsBaseUrl}; Embeddings model={EmbeddingsModel}; Dynamo ServiceURL={DynamoServiceUrl}; Dynamo RegionEndpoint={DynamoRegion}",
+            string.IsNullOrWhiteSpace(awsServiceUrl) ? "<default AWS SDK resolution>" : awsServiceUrl,
+            string.IsNullOrWhiteSpace(ragOptions.TableName) ? "<empty>" : ragOptions.TableName,
+            string.IsNullOrWhiteSpace(embeddingOptions.BaseUrl) ? "<empty>" : embeddingOptions.BaseUrl,
+            string.IsNullOrWhiteSpace(embeddingOptions.Model) ? "<empty>" : embeddingOptions.Model,
+            string.IsNullOrWhiteSpace(clientConfig?.ServiceURL) ? "<not set>" : clientConfig.ServiceURL,
+            clientConfig?.RegionEndpoint?.SystemName ?? "<not set>");
+
         if (string.IsNullOrWhiteSpace(embeddingOptions.BaseUrl)
             || string.IsNullOrWhiteSpace(embeddingOptions.ApiKey)
             || string.IsNullOrWhiteSpace(embeddingOptions.Model))
         {
             Console.Error.WriteLine("Embedding configuration missing. Set RagEmbeddings in appsettings.json or EMBEDDINGS_BASE_URL, EMBEDDINGS_API_KEY, and EMBEDDINGS_MODEL.");
             return 1;
+        }
+
+        if (!string.IsNullOrWhiteSpace(ragOptions.TableName))
+        {
+            try
+            {
+                await dynamoDbClient.DescribeTableAsync(ragOptions.TableName, cts.Token).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                logger.LogError(ex, "Failed to verify RAG table {RagTable} using configured DynamoDB client.", ragOptions.TableName);
+                return 1;
+            }
         }
 
         var runner = host.Services.GetRequiredService<PdfIngestionRunner>();
