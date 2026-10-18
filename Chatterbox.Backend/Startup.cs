@@ -77,7 +77,7 @@ public class Startup
         hostBuilder.Services.AddSingleton<ConnectionsStore>();
         hostBuilder.Services.AddSingleton<DeepSeekClient>();
 
-        hostBuilder.Services.AddSingleton<IEmbeddingGenerator, SemanticKernelEmbeddingGenerator>();
+        hostBuilder.Services.AddEmbeddingGeneration();
         hostBuilder.Services.AddSingleton<IRagRepository, DynamoDbRagRepository>();
         hostBuilder.Services.AddSingleton<RagRetrievalService>();
 

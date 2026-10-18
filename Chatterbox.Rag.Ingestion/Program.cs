@@ -1,5 +1,6 @@
 ﻿using Amazon;
 using Amazon.DynamoDBv2;
+using Chatterbox.Rag;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -98,7 +99,7 @@ public static class Program
 
         builder.Services.AddSingleton<TextChunker>();
         builder.Services.AddSingleton<IRagRepository, DynamoDbRagRepository>();
-        builder.Services.AddSingleton<IEmbeddingGenerator, SemanticKernelEmbeddingGenerator>();
+        builder.Services.AddEmbeddingGeneration();
         builder.Services.AddSingleton<PdfIngestionRunner>();
 
         using var host = builder.Build();

@@ -1,8 +1,6 @@
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
-using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.Embeddings;
+using OpenAI.Embeddings;
 using System.Net;
 
 namespace Chatterbox.Rag;
@@ -12,16 +10,20 @@ public sealed class SemanticKernelEmbeddingGenerator : IEmbeddingGenerator
     private const int MaxRetries = 3;
 
     private readonly EmbeddingOptions _options;
+    private readonly EmbeddingClient _embeddingClient;
     private readonly ILogger<SemanticKernelEmbeddingGenerator> _logger;
 
     public SemanticKernelEmbeddingGenerator(
         IOptions<EmbeddingOptions> options,
+        EmbeddingClient embeddingClient,
         ILogger<SemanticKernelEmbeddingGenerator> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
+        ArgumentNullException.ThrowIfNull(embeddingClient);
         ArgumentNullException.ThrowIfNull(logger);
 
         _options = options.Value;
+        _embeddingClient = embeddingClient;
         _logger = logger;
     }
 
@@ -49,22 +51,11 @@ public sealed class SemanticKernelEmbeddingGenerator : IEmbeddingGenerator
 
             try
             {
-                var kernelBuilder = Kernel.CreateBuilder();
-                using var httpClient = new HttpClient
-                {
-                    BaseAddress = new Uri(_options.BaseUrl)
-                };
+                var embedding = await _embeddingClient
+                    .GenerateEmbeddingAsync(text, cancellationToken: cancellationToken)
+                    .ConfigureAwait(false);
 
-                kernelBuilder.AddOpenAITextEmbeddingGeneration(
-                    modelId: _options.Model,
-                    apiKey: _options.ApiKey,
-                    httpClient: httpClient);
-
-                var kernel = kernelBuilder.Build();
-                var embeddingService = kernel.GetRequiredService<ITextEmbeddingGenerationService>();
-
-                var embedding = await embeddingService.GenerateEmbeddingAsync(text, cancellationToken: cancellationToken).ConfigureAwait(false);
-                return embedding.ToArray();
+                return embedding.Value.ToFloats().ToArray();
             }
             catch (OperationCanceledException)
             {
