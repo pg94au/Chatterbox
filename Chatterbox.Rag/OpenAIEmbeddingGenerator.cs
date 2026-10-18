@@ -5,18 +5,18 @@ using System.Net;
 
 namespace Chatterbox.Rag;
 
-public sealed class SemanticKernelEmbeddingGenerator : IEmbeddingGenerator
+public sealed class OpenAIEmbeddingGenerator : IEmbeddingGenerator
 {
     private const int MaxRetries = 3;
 
     private readonly EmbeddingOptions _options;
     private readonly EmbeddingClient _embeddingClient;
-    private readonly ILogger<SemanticKernelEmbeddingGenerator> _logger;
+    private readonly ILogger<OpenAIEmbeddingGenerator> _logger;
 
-    public SemanticKernelEmbeddingGenerator(
+    public OpenAIEmbeddingGenerator(
         IOptions<EmbeddingOptions> options,
         EmbeddingClient embeddingClient,
-        ILogger<SemanticKernelEmbeddingGenerator> logger)
+        ILogger<OpenAIEmbeddingGenerator> logger)
     {
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(embeddingClient);

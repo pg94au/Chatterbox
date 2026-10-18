@@ -40,7 +40,7 @@ public static class EmbeddingServiceCollectionExtensions
             return new EmbeddingClient(options.Model, new ApiKeyCredential(options.ApiKey), clientOptions);
         });
 
-        services.AddSingleton<IEmbeddingGenerator, SemanticKernelEmbeddingGenerator>();
+        services.AddSingleton<IEmbeddingGenerator, OpenAIEmbeddingGenerator>();
 
         return services;
     }
