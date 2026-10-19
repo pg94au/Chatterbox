@@ -18,6 +18,8 @@ namespace Chatterbox.Backend.Tests;
 public class DynamoDbRagRepositoryTests
 {
     private const string RagTableName = "chatterbox-rag-test";
+    private const string RagVectorIndexName = "embedding-index";
+    private const int EmbeddingDimensions = 2;
 
     private FlociContainer _flociContainer = null!;
     private IAmazonDynamoDB _dynamoDbClient = null!;
@@ -31,7 +33,7 @@ public class DynamoDbRagRepositoryTests
             .WithName($"floci-rag-network-{Guid.NewGuid():N}")
             .Build();
 
-        _flociContainer = new FlociBuilder("floci/floci:2.0.1")
+        _flociContainer = new FlociBuilder("floci/floci:2.3.0")
             .WithCleanUp(true)
             .WithName($"floci-rag-{Guid.NewGuid():N}")
             .WithNetwork(network)
@@ -70,6 +72,39 @@ public class DynamoDbRagRepositoryTests
                 new KeySchemaElement("sk", KeyType.RANGE)
             ]
         });
+
+        await _dynamoDbClient.UpdateTableAsync(new UpdateTableRequest
+        {
+            TableName = RagTableName,
+            BillingMode = BillingMode.PAY_PER_REQUEST,
+        });
+
+        await _dynamoDbClient.UpdateTableAsync(new UpdateTableRequest
+        {
+            TableName = RagTableName,
+            VectorIndexUpdates =
+            [
+                new VectorIndexUpdate
+                {
+                    Create = new CreateVectorIndexAction
+                    {
+                        IndexName = RagVectorIndexName,
+                        Dimensions = EmbeddingDimensions,
+                        DistanceFunction = "COSINE",
+                        VectorAttribute = new VectorAttributeDefinition
+                        {
+                            AttributeName = "embedding"
+                        },
+                        Projection = new Projection
+                        {
+                            ProjectionType = ProjectionType.ALL
+                        }
+                    }
+                }
+            ]
+        });
+
+        await WaitForVectorIndexToBecomeActiveAsync();
     }
 
     [SetUp]
@@ -118,10 +153,28 @@ public class DynamoDbRagRepositoryTests
         var options = Options.Create(new RagOptions
         {
             TableName = RagTableName,
+            EmbeddingDimensions = EmbeddingDimensions,
             TopK = 5
         });
 
         return new DynamoDbRagRepository(_dynamoDbClient, options, NullLogger<DynamoDbRagRepository>.Instance);
+    }
+
+    private async Task WaitForVectorIndexToBecomeActiveAsync()
+    {
+        for (var attempt = 0; attempt < 30; attempt++)
+        {
+            var response = await _dynamoDbClient.DescribeTableAsync(RagTableName);
+            var vectorIndex = response.Table.VectorIndexes?.FirstOrDefault(index => string.Equals(index.IndexName, RagVectorIndexName, StringComparison.Ordinal));
+            if (vectorIndex?.IndexStatus?.Value == "ACTIVE")
+            {
+                return;
+            }
+
+            await Task.Delay(TimeSpan.FromSeconds(1));
+        }
+
+        throw new InvalidOperationException($"Vector index '{RagVectorIndexName}' did not become ACTIVE in time.");
     }
 
     private async Task ClearTableAsync()

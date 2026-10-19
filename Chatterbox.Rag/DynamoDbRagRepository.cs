@@ -8,6 +8,8 @@ namespace Chatterbox.Rag;
 
 public sealed class DynamoDbRagRepository : IRagRepository
 {
+    private const string VectorIndexName = "embedding-index";
+
     private readonly IAmazonDynamoDB _dynamoDb;
     private readonly RagOptions _options;
     private readonly ILogger<DynamoDbRagRepository> _logger;
@@ -55,8 +57,7 @@ public sealed class DynamoDbRagRepository : IRagRepository
     }
 
     /// <summary>
-    /// Searches similar chunks using DynamoDB native vector query when available,
-    /// and falls back to cosine ranking in-process when native support is unavailable.
+    /// Searches similar chunks using DynamoDB native vector index search.
     /// </summary>
     /// <param name="queryEmbedding">Query embedding vector.</param>
     /// <param name="topK">Maximum matches to return.</param>
@@ -78,108 +79,50 @@ public sealed class DynamoDbRagRepository : IRagRepository
 
         if (string.IsNullOrWhiteSpace(_options.TableName))
         {
-            _logger.LogWarning("RAG table name is not configured.");
-            return [];
+            throw new InvalidOperationException("RAG table name is not configured.");
         }
 
-        var nativeResults = await TrySearchUsingNativeVectorQueryAsync(queryEmbedding, topK, cancellationToken).ConfigureAwait(false);
-        if (nativeResults is not null)
+        if (_options.EmbeddingDimensions <= 0)
         {
-            return nativeResults;
+            throw new InvalidOperationException("RAG embedding dimensions must be greater than zero.");
         }
 
-        var items = await ScanAllItemsAsync(cancellationToken).ConfigureAwait(false);
-        return RankByCosineSimilarity(items, queryEmbedding, topK);
-    }
-
-    private async Task<IReadOnlyList<RagSearchResult>?> TrySearchUsingNativeVectorQueryAsync(float[] queryEmbedding, int topK, CancellationToken cancellationToken)
-    {
-        try
+        if (queryEmbedding.Length != _options.EmbeddingDimensions)
         {
-            var request = new ExecuteStatementRequest
+            throw new InvalidOperationException($"Query embedding length {queryEmbedding.Length} does not match configured vector index dimensions {_options.EmbeddingDimensions}.");
+        }
+
+        var request = new SearchVectorsRequest
+        {
+            TableName = _options.TableName,
+            IndexName = VectorIndexName,
+            TopK = topK,
+            SearchVector = ToSearchVector(queryEmbedding),
+            ProjectionExpression = "documentId, chunkId, sourceFileName, chunkIndex, pageNumber, #text",
+            ExpressionAttributeNames = new Dictionary<string, string>
             {
-                Statement = $"SELECT documentId, chunkId, sourceFileName, chunkIndex, pageNumber, text, cosine_similarity(embedding, ?) AS score FROM \"{_options.TableName}\" ORDER BY cosine_similarity(embedding, ?) DESC LIMIT {topK}",
-                Parameters =
-                [
-                    new AttributeValue
-                    {
-                        L = queryEmbedding.Select(value => new AttributeValue
-                        {
-                            N = value.ToString(CultureInfo.InvariantCulture)
-                        }).ToList()
-                    },
-                    new AttributeValue
-                    {
-                        L = queryEmbedding.Select(value => new AttributeValue
-                        {
-                            N = value.ToString(CultureInfo.InvariantCulture)
-                        }).ToList()
-                    }
-                ]
-            };
-
-            var response = await _dynamoDb.ExecuteStatementAsync(request, cancellationToken).ConfigureAwait(false);
-            return response.Items
-                .Select(item => ToSearchResult(item, ParseFloat(item, "score")))
-                .ToArray();
-        }
-        catch (AmazonDynamoDBException ex)
-        {
-            _logger.LogInformation(ex, "Native DynamoDB vector query is unavailable. Falling back to in-process cosine ranking.");
-            return null;
-        }
-    }
-
-    private async Task<List<Dictionary<string, AttributeValue>>> ScanAllItemsAsync(CancellationToken cancellationToken)
-    {
-        var items = new List<Dictionary<string, AttributeValue>>();
-        Dictionary<string, AttributeValue>? lastEvaluatedKey = null;
-
-        do
-        {
-            var request = new ScanRequest
-            {
-                TableName = _options.TableName,
-                ExclusiveStartKey = lastEvaluatedKey,
-            };
-
-            var response = await _dynamoDb.ScanAsync(request, cancellationToken).ConfigureAwait(false);
-            items.AddRange(response.Items);
-            lastEvaluatedKey = response.LastEvaluatedKey;
-        }
-        while (lastEvaluatedKey is { Count: > 0 });
-
-        return items;
-    }
-
-    private static IReadOnlyList<RagSearchResult> RankByCosineSimilarity(
-        IReadOnlyList<Dictionary<string, AttributeValue>> items,
-        IReadOnlyList<float> queryEmbedding,
-        int topK)
-    {
-        if (items.Count == 0)
-        {
-            return [];
-        }
-
-        var results = new List<RagSearchResult>(items.Count);
-        foreach (var item in items)
-        {
-            var embedding = ParseEmbedding(item);
-            if (embedding.Length == 0 || embedding.Length != queryEmbedding.Count)
-            {
-                continue;
+                ["#text"] = "text"
             }
+        };
 
-            var score = CosineSimilarity(queryEmbedding, embedding);
-            results.Add(ToSearchResult(item, score));
+        var response = await _dynamoDb.SearchVectorsAsync(request, cancellationToken).ConfigureAwait(false);
+        if (response.SearchResults is null || response.SearchResults.Count == 0)
+        {
+            return [];
         }
 
-        return results
-            .OrderByDescending(result => result.Score)
-            .Take(topK)
+        _logger.LogDebug("SearchVectors returned {ResultCount} results from {TableName}/{VectorIndexName}.", response.SearchResults.Count, _options.TableName, VectorIndexName);
+
+        return response.SearchResults
+            .Select(result => ToSearchResult(result.Item, (float)(result.Score ?? 0d)))
             .ToArray();
     }
+
+    private static List<AttributeValue> ToSearchVector(IEnumerable<float> embedding) =>
+        embedding.Select(value => new AttributeValue
+        {
+            N = value.ToString(CultureInfo.InvariantCulture)
+        }).ToList();
 
     private static Dictionary<string, AttributeValue> ToItem(RagChunk chunk)
     {
@@ -205,38 +148,6 @@ public sealed class DynamoDbRagRepository : IRagRepository
         };
 
         return item;
-    }
-
-    private static float[] ParseEmbedding(IReadOnlyDictionary<string, AttributeValue> item)
-    {
-        if (!item.TryGetValue("embedding", out var embeddingValue) || embeddingValue.L.Count == 0)
-        {
-            return [];
-        }
-
-        var values = new float[embeddingValue.L.Count];
-
-        for (var i = 0; i < embeddingValue.L.Count; i++)
-        {
-            if (!float.TryParse(embeddingValue.L[i].N, NumberStyles.Float, CultureInfo.InvariantCulture, out values[i]))
-            {
-                return [];
-            }
-        }
-
-        return values;
-    }
-
-    private static float ParseFloat(IReadOnlyDictionary<string, AttributeValue> item, string key)
-    {
-        if (!item.TryGetValue(key, out var value) || string.IsNullOrWhiteSpace(value.N))
-        {
-            return 0;
-        }
-
-        return float.TryParse(value.N, NumberStyles.Float, CultureInfo.InvariantCulture, out var result)
-            ? result
-            : 0;
     }
 
     private static int ParseInt(IReadOnlyDictionary<string, AttributeValue> item, string key)

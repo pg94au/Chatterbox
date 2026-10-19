@@ -74,6 +74,12 @@ public static class Program
             {
                 options.TableName = ragTableOverride;
             }
+
+            var ragEmbeddingDimensionsOverride = builder.Configuration["RAG_EMBEDDING_DIMENSIONS"];
+            if (int.TryParse(ragEmbeddingDimensionsOverride, out var ragEmbeddingDimensions) && ragEmbeddingDimensions > 0)
+            {
+                options.EmbeddingDimensions = ragEmbeddingDimensions;
+            }
         });
 
         builder.Services.PostConfigure<EmbeddingOptions>(options =>

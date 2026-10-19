@@ -36,6 +36,12 @@ Parameters:
     Description: 'DynamoDB table name for RAG chunks'
     Default: 'chatterbox-rag'
 
+  RagEmbeddingDimensions:
+    Type: Number
+    Description: 'Embedding vector dimensions for the RAG vector index.'
+    Default: 1536
+    MinValue: 1
+
   EmbeddingsBaseUrl:
     Type: String
     Description: 'OpenAI-compatible embeddings endpoint base URL (for example https://api.openai.com/v1)'
@@ -90,6 +96,7 @@ Parameters:
 Conditions:
   UseDeepSeek: !Equals [!Ref EnableDeepSeek, 'true']
   CreateCustomDomain: !Equals [!Ref EnableCustomDomain, 'true']
+  UseTemplateManagedVectorIndex: !Equals [!Ref AwsServiceUrl, '']
 
 Resources:
   # DynamoDB Table for connection tracking
@@ -135,6 +142,16 @@ Resources:
           KeyType: HASH
         - AttributeName: sk
           KeyType: RANGE
+      VectorIndexes: !If
+        - UseTemplateManagedVectorIndex
+        - - IndexName: embedding-index
+            VectorAttribute:
+              AttributeName: embedding
+            Dimensions: !Ref RagEmbeddingDimensions
+            DistanceFunction: COSINE
+            Projection:
+              ProjectionType: ALL
+        - !Ref AWS::NoValue
       Tags:
         - Key: Application
           Value: Chatterbox
@@ -180,6 +197,7 @@ Resources:
               - dynamodb:DeleteItem
               - dynamodb:Query
               - dynamodb:Scan
+              - dynamodb:SearchVectors
             Resource:
               - !GetAtt ConnectionsTable.Arn
               - !Sub '${ConnectionsTable.Arn}/index/*'
@@ -210,6 +228,7 @@ Resources:
           CONNECTIONS_TABLE: !Ref ConnectionsTable
           RAG_TABLE: !Ref RagChunksTable
           RAG_TOP_K: '5'
+          RAG_EMBEDDING_DIMENSIONS: !Sub '${RagEmbeddingDimensions}'
           EMBEDDINGS_BASE_URL: !Ref EmbeddingsBaseUrl
           EMBEDDINGS_API_KEY: !Ref EmbeddingsApiKey
           EMBEDDINGS_MODEL: !Ref EmbeddingsModel

@@ -47,10 +47,14 @@ public class Startup
             var topK = int.TryParse(configuration["RAG_TOP_K"], out var parsedTopK)
                 ? parsedTopK
                 : 5;
+            var embeddingDimensions = int.TryParse(configuration["RAG_EMBEDDING_DIMENSIONS"], out var parsedEmbeddingDimensions)
+                ? parsedEmbeddingDimensions
+                : 1536;
 
             return Options.Create(new RagOptions
             {
                 TableName = configuration["RAG_TABLE"] ?? string.Empty,
+                EmbeddingDimensions = embeddingDimensions,
                 TopK = topK
             });
         });
