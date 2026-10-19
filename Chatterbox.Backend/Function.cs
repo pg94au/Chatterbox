@@ -16,23 +16,23 @@ public class Functions
     private const string AgentDisplayName = "Agent";
 
     private readonly ConnectionsStore _connectionsStore;
-    private readonly DeepSeekClient _deepSeekClient;
+    private readonly IModelClient _modelClient;
     private readonly RagRetrievalService _ragRetrievalService;
     private readonly ILogger<Functions> _logger;
 
     public Functions(
         ConnectionsStore connectionsStore,
-        DeepSeekClient deepSeekClient,
+        IModelClient modelClient,
         RagRetrievalService ragRetrievalService,
         ILogger<Functions> logger)
     {
         ArgumentNullException.ThrowIfNull(connectionsStore);
-        ArgumentNullException.ThrowIfNull(deepSeekClient);
+        ArgumentNullException.ThrowIfNull(modelClient);
         ArgumentNullException.ThrowIfNull(ragRetrievalService);
         ArgumentNullException.ThrowIfNull(logger);
 
         _connectionsStore = connectionsStore;
-        _deepSeekClient = deepSeekClient;
+        _modelClient = modelClient;
         _ragRetrievalService = ragRetrievalService;
         _logger = logger;
 
@@ -270,7 +270,7 @@ public class Functions
                 _logger.LogWarning(ex, "RAG retrieval skipped due to configuration issue.");
             }
 
-            var response = await _deepSeekClient.GetResponseFromAgentAsync(body.Text, sender.DisplayName, context);
+            var response = await _modelClient.GetResponseFromAgentAsync(body.Text, sender.DisplayName, context);
             await SendToConnection(
                 apiClient,
                 senderConnectionId,

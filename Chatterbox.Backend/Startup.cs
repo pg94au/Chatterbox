@@ -79,9 +79,26 @@ public class Startup
         );
 
         hostBuilder.Services.AddSingleton<ConnectionsStore>();
-        hostBuilder.Services.AddSingleton<DeepSeekClient>();
 
-        hostBuilder.Services.AddEmbeddingGeneration();
+        var configuration = hostBuilder.Configuration;
+        var hasDeepSeekConfig = !string.IsNullOrWhiteSpace(configuration["DEEPSEEK_BASE_URL"])
+            && !string.IsNullOrWhiteSpace(configuration["DEEPSEEK_API_KEY"])
+            && !string.IsNullOrWhiteSpace(configuration["DEEPSEEK_MODEL"]);
+        var hasEmbeddingConfig = !string.IsNullOrWhiteSpace(configuration["EMBEDDINGS_BASE_URL"])
+            && !string.IsNullOrWhiteSpace(configuration["EMBEDDINGS_API_KEY"])
+            && !string.IsNullOrWhiteSpace(configuration["EMBEDDINGS_MODEL"]);
+
+        if (hasDeepSeekConfig && hasEmbeddingConfig)
+        {
+            hostBuilder.Services.AddEmbeddingGeneration();
+            hostBuilder.Services.AddSingleton<IModelClient, DeepSeekClient>();
+        }
+        else
+        {
+            hostBuilder.Services.AddSingleton<IEmbeddingGenerator, NullEmbeddingGenerator>();
+            hostBuilder.Services.AddSingleton<IModelClient, NullModelClient>();
+        }
+
         hostBuilder.Services.AddSingleton<IRagRepository, DynamoDbRagRepository>();
         hostBuilder.Services.AddSingleton<RagRetrievalService>();
 

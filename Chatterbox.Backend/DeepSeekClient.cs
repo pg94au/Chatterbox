@@ -9,7 +9,7 @@ namespace Chatterbox.Backend;
 /// <summary>
 /// A client for interacting with the DeepSeek API to obtain responses from our AI agent.
 /// </summary>
-public class DeepSeekClient
+public class DeepSeekClient : IModelClient
 {
     private static readonly HttpClient HttpClient = new();
     private readonly DeepSeekOptions _deepSeekOptions;
