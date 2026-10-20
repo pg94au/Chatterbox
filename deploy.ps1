@@ -322,6 +322,9 @@ if ($isFlociMode) {
 		) | ConvertTo-Json -Depth 8 -Compress
 
 		Invoke-AwsCli -Arguments @('dynamodb', 'update-table', '--table-name', $physicalRagTableName, '--vector-index-updates', $vectorIndexUpdates, '--region', $Region) | Out-Null
+		if ($LASTEXITCODE -ne 0) {
+			throw "Vector index '$RagVectorIndexName' creation failed on $physicalRagTableName"
+		}
 		Write-Host "  ✓ Created vector index '$RagVectorIndexName' on $physicalRagTableName" -ForegroundColor Gray
 	}
 	else {
