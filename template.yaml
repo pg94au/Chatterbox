@@ -49,6 +49,7 @@ Parameters:
 
   EmbeddingsApiKey:
     Type: String
+    NoEcho: true
     Description: 'API key for the embeddings service.'
     Default: ''
 
