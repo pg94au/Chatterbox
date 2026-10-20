@@ -3,6 +3,7 @@ using Amazon.ApiGatewayManagementApi.Model;
 using Amazon.Lambda.Annotations;
 using Amazon.Lambda.APIGatewayEvents;
 using Amazon.Lambda.Core;
+using Chatterbox.Rag;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
@@ -15,13 +16,24 @@ public class Functions
     private const string AgentDisplayName = "Agent";
 
     private readonly ConnectionsStore _connectionsStore;
-    private readonly DeepSeekClient _deepSeekClient;
+    private readonly IModelClient _modelClient;
+    private readonly RagRetrievalService _ragRetrievalService;
     private readonly ILogger<Functions> _logger;
 
-    public Functions(ConnectionsStore connectionsStore, DeepSeekClient deepSeekClient, ILogger<Functions> logger)
+    public Functions(
+        ConnectionsStore connectionsStore,
+        IModelClient modelClient,
+        RagRetrievalService ragRetrievalService,
+        ILogger<Functions> logger)
     {
+        ArgumentNullException.ThrowIfNull(connectionsStore);
+        ArgumentNullException.ThrowIfNull(modelClient);
+        ArgumentNullException.ThrowIfNull(ragRetrievalService);
+        ArgumentNullException.ThrowIfNull(logger);
+
         _connectionsStore = connectionsStore;
-        _deepSeekClient = deepSeekClient;
+        _modelClient = modelClient;
+        _ragRetrievalService = ragRetrievalService;
         _logger = logger;
 
         _logger.LogInformation("Functions class initialized.");
@@ -245,7 +257,20 @@ public class Functions
         if (body.To == AgentDisplayName)
         {
             _logger.LogInformation("Sending request to AI agent.");
-            var response = await _deepSeekClient.GetResponseFromAgentAsync(body.Text, sender.DisplayName);
+
+            string context = string.Empty;
+            try
+            {
+                var retrieval = await _ragRetrievalService.BuildContextAsync(body.Text).ConfigureAwait(false);
+                context = retrieval.Context;
+                _logger.LogInformation("Retrieved {ChunkCount} RAG chunks for agent request.", retrieval.Matches.Count);
+            }
+            catch (InvalidOperationException ex)
+            {
+                _logger.LogWarning(ex, "RAG retrieval skipped due to configuration issue.");
+            }
+
+            var response = await _modelClient.GetResponseFromAgentAsync(body.Text, sender.DisplayName, context);
             await SendToConnection(
                 apiClient,
                 senderConnectionId,

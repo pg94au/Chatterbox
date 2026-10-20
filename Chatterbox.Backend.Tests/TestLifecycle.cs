@@ -119,7 +119,7 @@ public class TestLifecycle(FeatureContext featureContext)
             .WithName(_flociNetworkName)
             .Build();
 
-        _flociContainer = new FlociBuilder("floci/floci:2.0.1")
+        _flociContainer = new FlociBuilder("floci/floci:2.3.0")
             .WithCleanUp(true)
             .WithName($"floci-{Guid.NewGuid():N}")
             .WithNetwork(network)

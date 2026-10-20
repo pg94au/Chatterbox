@@ -24,6 +24,18 @@ param(
 	[string]$DeepSeekApiKey = "",
 
 	[Parameter(Mandatory=$false)]
+	[string]$EmbeddingsBaseUrl = "",
+
+	[Parameter(Mandatory=$false)]
+	[string]$EmbeddingsApiKey = "",
+
+	[Parameter(Mandatory=$false)]
+	[string]$EmbeddingsModel = "",
+
+	[Parameter(Mandatory=$false)]
+	[int]$RagEmbeddingDimensions = 1536,
+
+	[Parameter(Mandatory=$false)]
 	[switch]$EnableCustomDomain,
 
 	[Parameter(Mandatory=$false)]
@@ -42,6 +54,8 @@ $BackendRoot = Join-Path $RepoRoot "Chatterbox.Backend"
 $StackName = "chatterbox-$Environment"
 $StageName = $Environment
 $TableName = "chatterbox-connections-$Environment"
+$RagTableName = "chatterbox-rag-$Environment"
+$RagVectorIndexName = "embedding-index"
 
 Write-Host "=== Chatterbox Deployment ===" -ForegroundColor Cyan
 Write-Host "Environment: $Environment" -ForegroundColor Yellow
@@ -49,7 +63,13 @@ Write-Host "Stack: $StackName" -ForegroundColor Yellow
 Write-Host "S3 Bucket: $S3Bucket" -ForegroundColor Yellow
 Write-Host "Stage: $StageName" -ForegroundColor Yellow
 Write-Host "Table: $TableName" -ForegroundColor Yellow
+$isFlociMode = -not [string]::IsNullOrWhiteSpace($AwsServiceUrl)
+
+Write-Host "RAG Table: $RagTableName" -ForegroundColor Yellow
+Write-Host "RAG Vector Index: $RagVectorIndexName" -ForegroundColor Yellow
+Write-Host "Embedding Dimensions: $RagEmbeddingDimensions" -ForegroundColor Yellow
 Write-Host "Region: $Region" -ForegroundColor Yellow
+Write-Host "Floci mode: $isFlociMode" -ForegroundColor Yellow
 if ($AwsServiceUrl) {
 	Write-Host "AWS Service Url: $AwsServiceUrl" -ForegroundColor Yellow
 }
@@ -215,6 +235,9 @@ if ($EnableCustomDomain) {
 		throw "-EnableCustomDomain requires both -CustomDomainName and -CertificateArn to be provided."
 	}
 }
+if ($RagEmbeddingDimensions -le 0) {
+	throw "-RagEmbeddingDimensions must be greater than 0."
+}
 
 $enableDeepSeekValue = if ($EnableDeepSeek) { "true" } else { "false" }
 $enableCustomDomainValue = if ($EnableCustomDomain) { "true" } else { "false" }
@@ -222,6 +245,11 @@ $enableCustomDomainValue = if ($EnableCustomDomain) { "true" } else { "false" }
 $parameterOverrides = @(
 	"Environment=$Environment",
 	"TableName=$TableName",
+	"RagTableName=$RagTableName",
+	"RagEmbeddingDimensions=$RagEmbeddingDimensions",
+	"EmbeddingsBaseUrl=$EmbeddingsBaseUrl",
+	"EmbeddingsApiKey=$EmbeddingsApiKey",
+	"EmbeddingsModel=$EmbeddingsModel",
 	"LambdaCodeBucket=$S3Bucket",
 	"LambdaCodeKey=$s3Key",
 	"StageName=$StageName",
@@ -266,6 +294,42 @@ Write-Host @deployArgs
 
 if ($LASTEXITCODE -ne 0) {
 	throw "CloudFormation deployment failed"
+}
+
+if ($isFlociMode) {
+	Write-Host "[Floci] Applying vector index post-deploy workaround..." -ForegroundColor Green
+	$physicalRagTableName = "$RagTableName-$StageName"
+
+	Invoke-AwsCli -Arguments @('dynamodb', 'update-table', '--table-name', $physicalRagTableName, '--billing-mode', 'PAY_PER_REQUEST', '--region', $Region) | Out-Null
+
+	$existingIndexesJson = Invoke-AwsCli -Arguments @('dynamodb', 'describe-table', '--table-name', $physicalRagTableName, '--query', 'Table.VectorIndexes[].IndexName', '--output', 'json', '--region', $Region)
+	$existingIndexes = @()
+	if (-not [string]::IsNullOrWhiteSpace($existingIndexesJson) -and $existingIndexesJson -ne 'null') {
+		$existingIndexes = @($existingIndexesJson | ConvertFrom-Json)
+	}
+
+	if ($existingIndexes -notcontains $RagVectorIndexName) {
+		$vectorIndexUpdates = @(
+			@{
+				Create = @{
+					IndexName = $RagVectorIndexName
+					VectorAttribute = @{ AttributeName = 'embedding' }
+					Dimensions = $RagEmbeddingDimensions
+					DistanceFunction = 'COSINE'
+					Projection = @{ ProjectionType = 'ALL' }
+				}
+			}
+		) | ConvertTo-Json -Depth 8 -Compress
+
+		Invoke-AwsCli -Arguments @('dynamodb', 'update-table', '--table-name', $physicalRagTableName, '--vector-index-updates', $vectorIndexUpdates, '--region', $Region) | Out-Null
+		if ($LASTEXITCODE -ne 0) {
+			throw "Vector index '$RagVectorIndexName' creation failed on $physicalRagTableName"
+		}
+		Write-Host "  ✓ Created vector index '$RagVectorIndexName' on $physicalRagTableName" -ForegroundColor Gray
+	}
+	else {
+		Write-Host "  ✓ Vector index '$RagVectorIndexName' already exists on $physicalRagTableName" -ForegroundColor Gray
+	}
 }
 
 Write-Host ""

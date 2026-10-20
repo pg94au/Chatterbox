@@ -10,4 +10,6 @@
     <File Path=".github/workflows/build-and-test.yml" />
   </Folder>
   <Project Path="Chatterbox.Backend.Tests/Chatterbox.Backend.Tests.csproj" />
+  <Project Path="Chatterbox.Rag.Ingestion/Chatterbox.Rag.Ingestion.csproj" />
+  <Project Path="Chatterbox.Rag/Chatterbox.Rag.csproj" />
 </Solution>
