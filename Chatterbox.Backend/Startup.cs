@@ -1,6 +1,8 @@
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DataModel;
 using Amazon.Lambda.Annotations;
+using Amazon.SimpleSystemsManagement;
+using Amazon.SimpleSystemsManagement.Model;
 using Chatterbox.Rag;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,6 +21,12 @@ public class Startup
         var hostBuilder = new HostApplicationBuilder();
 
         hostBuilder.Configuration.AddEnvironmentVariables();
+
+        var secureKeyOverrides = ResolveApiKeyConfigurationOverrides(hostBuilder.Configuration);
+        if (secureKeyOverrides.Count > 0)
+        {
+            hostBuilder.Configuration.AddInMemoryCollection(secureKeyOverrides);
+        }
 
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Verbose() // TODO: Allow this to be configured
@@ -103,5 +111,64 @@ public class Startup
         hostBuilder.Services.AddSingleton<RagRetrievalService>();
 
         return hostBuilder;
+    }
+
+    private static Dictionary<string, string?> ResolveApiKeyConfigurationOverrides(IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(configuration);
+
+        var overrides = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
+        var stageName = configuration["STAGE_NAME"];
+
+        if (string.IsNullOrWhiteSpace(stageName))
+        {
+            return overrides;
+        }
+
+        var normalizedStageName = stageName.Trim().ToLowerInvariant();
+        AddSecureParameterOverride(overrides, $"/chatterbox/{normalizedStageName}/openai/api-key", "EMBEDDINGS_API_KEY");
+
+        var hasDeepSeekEnabled = !string.IsNullOrWhiteSpace(configuration["DEEPSEEK_BASE_URL"])
+            || !string.IsNullOrWhiteSpace(configuration["DEEPSEEK_MODEL"]);
+
+        if (hasDeepSeekEnabled)
+        {
+            AddSecureParameterOverride(overrides, $"/chatterbox/{normalizedStageName}/deepseek/api-key", "DEEPSEEK_API_KEY");
+        }
+
+        return overrides;
+    }
+
+    private static void AddSecureParameterOverride(
+        IDictionary<string, string?> overrides,
+        string parameterName,
+        string targetConfigurationKey)
+    {
+        ArgumentNullException.ThrowIfNull(overrides);
+        ArgumentException.ThrowIfNullOrWhiteSpace(parameterName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(targetConfigurationKey);
+
+        var parameterValue = GetSecureStringParameterValue(parameterName);
+        if (string.IsNullOrWhiteSpace(parameterValue))
+        {
+            throw new InvalidOperationException($"SSM parameter '{parameterName}' did not return a value.");
+        }
+
+        overrides[targetConfigurationKey] = parameterValue;
+    }
+
+    private static string GetSecureStringParameterValue(string parameterName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(parameterName);
+
+        using var ssmClient = new AmazonSimpleSystemsManagementClient();
+        var response = ssmClient.GetParameterAsync(new GetParameterRequest
+        {
+            Name = parameterName,
+            WithDecryption = true
+        }).GetAwaiter().GetResult();
+
+        return response.Parameter?.Value
+            ?? throw new InvalidOperationException($"SSM parameter '{parameterName}' was not found.");
     }
 }
