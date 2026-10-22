@@ -1,8 +1,6 @@
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DataModel;
 using Amazon.Lambda.Annotations;
-using Amazon.SimpleSystemsManagement;
-using Amazon.SimpleSystemsManagement.Model;
 using Chatterbox.Rag;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -22,10 +20,14 @@ public class Startup
 
         hostBuilder.Configuration.AddEnvironmentVariables();
 
-        var secureKeyOverrides = ResolveApiKeyConfigurationOverrides(hostBuilder.Configuration);
-        if (secureKeyOverrides.Count > 0)
+        var stageName = hostBuilder.Configuration["STAGE_NAME"];
+        if (!string.IsNullOrWhiteSpace(stageName))
         {
-            hostBuilder.Configuration.AddInMemoryCollection(secureKeyOverrides);
+            hostBuilder.Configuration.AddSystemsManager(source =>
+            {
+                source.Path = $"/chatterbox/{stageName.Trim().ToLowerInvariant()}";
+                source.Optional = true;
+            });
         }
 
         Log.Logger = new LoggerConfiguration()
@@ -44,7 +46,7 @@ public class Startup
             return Options.Create(new DeepSeekOptions
             {
                 BaseUrl = configuration["DEEPSEEK_BASE_URL"] ?? string.Empty,
-                ApiKey = configuration["DEEPSEEK_API_KEY"] ?? string.Empty,
+                ApiKey = configuration["deepseek:api-key"] ?? string.Empty,
                 Model = configuration["DEEPSEEK_MODEL"] ?? string.Empty
             });
         });
@@ -74,7 +76,7 @@ public class Startup
             return Options.Create(new EmbeddingOptions
             {
                 BaseUrl = configuration["EMBEDDINGS_BASE_URL"] ?? string.Empty,
-                ApiKey = configuration["EMBEDDINGS_API_KEY"] ?? string.Empty,
+                ApiKey = configuration["openai:api-key"] ?? string.Empty,
                 Model = configuration["EMBEDDINGS_MODEL"] ?? string.Empty
             });
         });
@@ -89,11 +91,13 @@ public class Startup
         hostBuilder.Services.AddSingleton<ConnectionsStore>();
 
         var configuration = hostBuilder.Configuration;
+        var deepSeekApiKey = configuration["deepseek:api-key"];
+        var embeddingsApiKey = configuration["openai:api-key"];
         var hasDeepSeekConfig = !string.IsNullOrWhiteSpace(configuration["DEEPSEEK_BASE_URL"])
-            && !string.IsNullOrWhiteSpace(configuration["DEEPSEEK_API_KEY"])
+            && !string.IsNullOrWhiteSpace(deepSeekApiKey)
             && !string.IsNullOrWhiteSpace(configuration["DEEPSEEK_MODEL"]);
         var hasEmbeddingConfig = !string.IsNullOrWhiteSpace(configuration["EMBEDDINGS_BASE_URL"])
-            && !string.IsNullOrWhiteSpace(configuration["EMBEDDINGS_API_KEY"])
+            && !string.IsNullOrWhiteSpace(embeddingsApiKey)
             && !string.IsNullOrWhiteSpace(configuration["EMBEDDINGS_MODEL"]);
 
         if (hasDeepSeekConfig && hasEmbeddingConfig)
@@ -113,62 +117,4 @@ public class Startup
         return hostBuilder;
     }
 
-    private static Dictionary<string, string?> ResolveApiKeyConfigurationOverrides(IConfiguration configuration)
-    {
-        ArgumentNullException.ThrowIfNull(configuration);
-
-        var overrides = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
-        var stageName = configuration["STAGE_NAME"];
-
-        if (string.IsNullOrWhiteSpace(stageName))
-        {
-            return overrides;
-        }
-
-        var normalizedStageName = stageName.Trim().ToLowerInvariant();
-        AddSecureParameterOverride(overrides, $"/chatterbox/{normalizedStageName}/openai/api-key", "EMBEDDINGS_API_KEY");
-
-        var hasDeepSeekEnabled = !string.IsNullOrWhiteSpace(configuration["DEEPSEEK_BASE_URL"])
-            || !string.IsNullOrWhiteSpace(configuration["DEEPSEEK_MODEL"]);
-
-        if (hasDeepSeekEnabled)
-        {
-            AddSecureParameterOverride(overrides, $"/chatterbox/{normalizedStageName}/deepseek/api-key", "DEEPSEEK_API_KEY");
-        }
-
-        return overrides;
-    }
-
-    private static void AddSecureParameterOverride(
-        IDictionary<string, string?> overrides,
-        string parameterName,
-        string targetConfigurationKey)
-    {
-        ArgumentNullException.ThrowIfNull(overrides);
-        ArgumentException.ThrowIfNullOrWhiteSpace(parameterName);
-        ArgumentException.ThrowIfNullOrWhiteSpace(targetConfigurationKey);
-
-        var parameterValue = GetSecureStringParameterValue(parameterName);
-        if (string.IsNullOrWhiteSpace(parameterValue))
-        {
-            throw new InvalidOperationException($"SSM parameter '{parameterName}' did not return a value.");
-        }
-
-        overrides[targetConfigurationKey] = parameterValue;
-    }
-
-    private static string GetSecureStringParameterValue(string parameterName)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(parameterName);
-
-        using var ssmClient = new AmazonSimpleSystemsManagementClient();
-        var response = ssmClient.GetParameterAsync(new GetParameterRequest
-        {
-            Name = parameterName,
-            WithDecryption = true
-        }).GetAwaiter().GetResult();
-
-        return response.Parameter?.Value
-            ?? throw new InvalidOperationException($"SSM parameter '{parameterName}' was not found.");
-    }
 }
