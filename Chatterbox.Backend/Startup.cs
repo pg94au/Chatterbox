@@ -21,11 +21,14 @@ public class Startup
         hostBuilder.Configuration.AddEnvironmentVariables();
 
         var stageName = hostBuilder.Configuration["STAGE_NAME"];
+        Console.WriteLine($"STAGE_NAME: {stageName}");
         if (!string.IsNullOrWhiteSpace(stageName))
         {
+            var ssmPath = $"/chatterbox/{stageName.Trim().ToLowerInvariant()}";
+            Console.WriteLine($"SSM path: {ssmPath}");
             hostBuilder.Configuration.AddSystemsManager(source =>
             {
-                source.Path = $"/chatterbox/{stageName.Trim().ToLowerInvariant()}";
+                source.Path = ssmPath;
                 source.Optional = true;
             });
         }
@@ -92,10 +95,16 @@ public class Startup
 
         var configuration = hostBuilder.Configuration;
         var deepSeekApiKey = configuration["deepseek:api-key"];
+        Console.WriteLine($"deepseek:api-key: {deepSeekApiKey?.Length}");
         var embeddingsApiKey = configuration["openai:api-key"];
+        Console.WriteLine($"openai:api-key: {embeddingsApiKey?.Length}");
+        Console.WriteLine($"DEEPSEEK_BASE_URL: {configuration["DEEPSEEK_BASE_URL"]}");
+        Console.WriteLine($"DEEPSEEK_MODEL: {configuration["DEEPSEEK_MODEL"]}");
         var hasDeepSeekConfig = !string.IsNullOrWhiteSpace(configuration["DEEPSEEK_BASE_URL"])
             && !string.IsNullOrWhiteSpace(deepSeekApiKey)
             && !string.IsNullOrWhiteSpace(configuration["DEEPSEEK_MODEL"]);
+        Console.WriteLine($"EMBEDDINGS_BASE_URL: {configuration["EMBEDDINGS_BASE_URL"]}");
+        Console.WriteLine($"EMBEDDINGS_MODEL: {configuration["EMBEDDINGS_MODEL"]}");
         var hasEmbeddingConfig = !string.IsNullOrWhiteSpace(configuration["EMBEDDINGS_BASE_URL"])
             && !string.IsNullOrWhiteSpace(embeddingsApiKey)
             && !string.IsNullOrWhiteSpace(configuration["EMBEDDINGS_MODEL"]);
