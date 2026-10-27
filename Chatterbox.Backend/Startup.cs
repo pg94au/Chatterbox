@@ -20,6 +20,19 @@ public class Startup
 
         hostBuilder.Configuration.AddEnvironmentVariables();
 
+        var stageName = hostBuilder.Configuration["STAGE_NAME"];
+        Console.WriteLine($"STAGE_NAME: {stageName}");
+        if (!string.IsNullOrWhiteSpace(stageName))
+        {
+            var ssmPath = $"/chatterbox/{stageName.Trim().ToLowerInvariant()}";
+            Console.WriteLine($"SSM path: {ssmPath}");
+            hostBuilder.Configuration.AddSystemsManager(source =>
+            {
+                source.Path = ssmPath;
+                source.Optional = true;
+            });
+        }
+
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Verbose() // TODO: Allow this to be configured
             .Enrich.FromLogContext()
@@ -36,7 +49,7 @@ public class Startup
             return Options.Create(new DeepSeekOptions
             {
                 BaseUrl = configuration["DEEPSEEK_BASE_URL"] ?? string.Empty,
-                ApiKey = configuration["DEEPSEEK_API_KEY"] ?? string.Empty,
+                ApiKey = configuration["deepseek:api-key"] ?? string.Empty,
                 Model = configuration["DEEPSEEK_MODEL"] ?? string.Empty
             });
         });
@@ -66,7 +79,7 @@ public class Startup
             return Options.Create(new EmbeddingOptions
             {
                 BaseUrl = configuration["EMBEDDINGS_BASE_URL"] ?? string.Empty,
-                ApiKey = configuration["EMBEDDINGS_API_KEY"] ?? string.Empty,
+                ApiKey = configuration["openai:api-key"] ?? string.Empty,
                 Model = configuration["EMBEDDINGS_MODEL"] ?? string.Empty
             });
         });
@@ -81,11 +94,19 @@ public class Startup
         hostBuilder.Services.AddSingleton<ConnectionsStore>();
 
         var configuration = hostBuilder.Configuration;
+        var deepSeekApiKey = configuration["deepseek:api-key"];
+        Console.WriteLine($"deepseek:api-key: {deepSeekApiKey?.Length}");
+        var embeddingsApiKey = configuration["openai:api-key"];
+        Console.WriteLine($"openai:api-key: {embeddingsApiKey?.Length}");
+        Console.WriteLine($"DEEPSEEK_BASE_URL: {configuration["DEEPSEEK_BASE_URL"]}");
+        Console.WriteLine($"DEEPSEEK_MODEL: {configuration["DEEPSEEK_MODEL"]}");
         var hasDeepSeekConfig = !string.IsNullOrWhiteSpace(configuration["DEEPSEEK_BASE_URL"])
-            && !string.IsNullOrWhiteSpace(configuration["DEEPSEEK_API_KEY"])
+            && !string.IsNullOrWhiteSpace(deepSeekApiKey)
             && !string.IsNullOrWhiteSpace(configuration["DEEPSEEK_MODEL"]);
+        Console.WriteLine($"EMBEDDINGS_BASE_URL: {configuration["EMBEDDINGS_BASE_URL"]}");
+        Console.WriteLine($"EMBEDDINGS_MODEL: {configuration["EMBEDDINGS_MODEL"]}");
         var hasEmbeddingConfig = !string.IsNullOrWhiteSpace(configuration["EMBEDDINGS_BASE_URL"])
-            && !string.IsNullOrWhiteSpace(configuration["EMBEDDINGS_API_KEY"])
+            && !string.IsNullOrWhiteSpace(embeddingsApiKey)
             && !string.IsNullOrWhiteSpace(configuration["EMBEDDINGS_MODEL"]);
 
         if (hasDeepSeekConfig && hasEmbeddingConfig)
@@ -104,4 +125,5 @@ public class Startup
 
         return hostBuilder;
     }
+
 }

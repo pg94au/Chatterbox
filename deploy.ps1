@@ -21,13 +21,7 @@ param(
 	[switch]$EnableDeepSeek,
 
 	[Parameter(Mandatory=$false)]
-	[string]$DeepSeekApiKey = "",
-
-	[Parameter(Mandatory=$false)]
 	[string]$EmbeddingsBaseUrl = "",
-
-	[Parameter(Mandatory=$false)]
-	[string]$EmbeddingsApiKey = "",
 
 	[Parameter(Mandatory=$false)]
 	[string]$EmbeddingsModel = "",
@@ -225,11 +219,6 @@ Write-Host "  ✓ Uploaded to s3://$S3Bucket/$s3Key" -ForegroundColor Gray
 
 # Step 6: Deploy CloudFormation
 Write-Host "[6/6] Deploying CloudFormation stack..." -ForegroundColor Green
-if ($EnableDeepSeek) {
-	if ([string]::IsNullOrWhiteSpace($DeepSeekApiKey)) {
-		throw "-EnableDeepSeek requires -DeepSeekApiKey to be provided."
-	}
-}
 if ($EnableCustomDomain) {
 	if ([string]::IsNullOrWhiteSpace($CustomDomainName) -or [string]::IsNullOrWhiteSpace($CertificateArn)) {
 		throw "-EnableCustomDomain requires both -CustomDomainName and -CertificateArn to be provided."
@@ -248,7 +237,6 @@ $parameterOverrides = @(
 	"RagTableName=$RagTableName",
 	"RagEmbeddingDimensions=$RagEmbeddingDimensions",
 	"EmbeddingsBaseUrl=$EmbeddingsBaseUrl",
-	"EmbeddingsApiKey=$EmbeddingsApiKey",
 	"EmbeddingsModel=$EmbeddingsModel",
 	"LambdaCodeBucket=$S3Bucket",
 	"LambdaCodeKey=$s3Key",
@@ -258,10 +246,6 @@ $parameterOverrides = @(
 	"CustomDomainName=$CustomDomainName",
 	"CertificateArn=$CertificateArn"
 )
-
-if ($EnableDeepSeek) {
-	$parameterOverrides += "DeepSeekApiKey=$DeepSeekApiKey"
-}
 
 if ($AwsInternalServiceUrl) {
 	$parameterOverrides += "AwsServiceUrl=$AwsInternalServiceUrl"

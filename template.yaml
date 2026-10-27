@@ -47,12 +47,6 @@ Parameters:
     Description: 'OpenAI-compatible embeddings endpoint base URL (for example https://api.openai.com/v1)'
     Default: ''
 
-  EmbeddingsApiKey:
-    Type: String
-    NoEcho: true
-    Description: 'API key for the embeddings service.'
-    Default: ''
-
   EmbeddingsModel:
     Type: String
     Description: 'Embedding model identifier.'
@@ -70,11 +64,6 @@ Parameters:
     AllowedValues:
       - 'true'
       - 'false'
-
-  DeepSeekApiKey:
-    Type: String
-    Description: 'DeepSeek API key. Required when EnableDeepSeek=true.'
-    Default: ''
 
   EnableCustomDomain:
     Type: String
@@ -210,6 +199,12 @@ Resources:
             Resource:
               - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/${StageName}/POST/@connections/*'
               - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${WebSocketApi}/${StageName}/POST/${StageName}/@connections/*'
+          - Effect: Allow
+            Action:
+              - ssm:GetParameter
+              - ssm:GetParameters
+              - ssm:GetParametersByPath
+            Resource: '*'
 
   # Lambda Function
   WebSocketHandler:
@@ -230,12 +225,11 @@ Resources:
           RAG_TABLE: !Ref RagChunksTable
           RAG_TOP_K: '5'
           RAG_EMBEDDING_DIMENSIONS: !Sub '${RagEmbeddingDimensions}'
+          STAGE_NAME: !Ref StageName
           EMBEDDINGS_BASE_URL: !Ref EmbeddingsBaseUrl
-          EMBEDDINGS_API_KEY: !Ref EmbeddingsApiKey
           EMBEDDINGS_MODEL: !Ref EmbeddingsModel
           AWS_SERVICE_URL: !Ref AwsServiceUrl
           DEEPSEEK_BASE_URL: !If [UseDeepSeek, 'https://api.deepseek.com/v1', !Ref 'AWS::NoValue']
-          DEEPSEEK_API_KEY: !If [UseDeepSeek, !Ref DeepSeekApiKey, !Ref 'AWS::NoValue']
           DEEPSEEK_MODEL: !If [UseDeepSeek, 'deepseek-chat', !Ref 'AWS::NoValue']
       Tags:
         - Key: Application
